@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>학생맞춤통합지원 업무 도우미</title>
+<style>
+  :root {
+    --primary: #2457a7;
+    --primary-light: #e8f0fb;
+    --danger: #c0392b;
+    --warn: #b45309;
+    --ok: #1e7e50;
+    --ink: #23303f;
+    --muted: #6b7787;
+    --line: #d9dfe7;
+    --bg: #f2f4f7;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    font-size: 14px; color: var(--ink); background: var(--bg);
+  }
+  #app { max-width: 1100px; margin: 0 auto; padding: 0 16px 60px; }
+  header.top { padding: 18px 0 0; }
+  .title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .title-row h1 { font-size: 20px; margin: 0; color: var(--primary); }
+  .title-row .school { color: var(--muted); font-size: 13px; }
+  .title-row .spacer { flex: 1; }
+  .tabs { display: flex; gap: 4px; margin-top: 14px; border-bottom: 2px solid var(--primary); flex-wrap: wrap; }
+  .tabs button {
+    border: 1px solid var(--line); border-bottom: none; background: #e9edf2; color: var(--ink);
+    padding: 8px 14px; cursor: pointer; font-size: 14px; border-radius: 6px 6px 0 0; font-family: inherit;
+  }
+  .tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 700; }
+  .banner {
+    margin: 12px 0 0; padding: 10px 14px; background: #fff8e6; border: 1px solid #e6cf8e; border-radius: 8px;
+    font-size: 13px; color: #6b5312; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .banner .x { margin-left: auto; cursor: pointer; border: none; background: none; font-size: 15px; color: #6b5312; }
+  main { margin-top: 16px; }
+  h2 { font-size: 17px; margin: 22px 0 10px; }
+  h2:first-child { margin-top: 0; }
+  h3 { font-size: 15px; margin: 18px 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .stat-card { background: var(--card); border: 1px solid var(--line); border-left: 5px solid var(--primary); border-radius: 8px; padding: 12px 14px; }
+  .stat-card .num { font-size: 26px; font-weight: 700; }
+  .stat-card .lbl { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .stat-card.red { border-left-color: var(--danger); } .stat-card.red .num { color: var(--danger); }
+  .stat-card.amber { border-left-color: #d97706; } .stat-card.amber .num { color: var(--warn); }
+  .stat-card.green { border-left-color: var(--ok); } .stat-card.green .num { color: var(--ok); }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; font-size: 13.5px; }
+  th { background: #eef2f7; font-weight: 700; white-space: nowrap; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: var(--primary-light); }
+  .table-wrap { overflow-x: auto; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; border: 1px solid transparent; white-space: nowrap; }
+  .pill.level-관심 { background: #eef6ee; color: var(--ok); border-color: #bcd9c6; }
+  .pill.level-지원필요 { background: #fdf3e3; color: var(--warn); border-color: #ecd3a4; }
+  .pill.level-집중지원 { background: #fdecea; color: var(--danger); border-color: #efb9b2; }
+  .pill.stage { background: var(--primary-light); color: var(--primary); border-color: #b9cdea; }
+  .pill.stage-종결 { background: #eceff3; color: var(--muted); border-color: var(--line); }
+  .pill.area { background: #f1eefa; color: #5b4a9e; border-color: #cfc4ec; margin: 1px 2px 1px 0; }
+  .stage-flow { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .stage-flow .step { padding: 4px 10px; border-radius: 6px; background: #eceff3; color: var(--muted); font-size: 12.5px; }
+  .stage-flow .step.done { background: #dbe7f8; color: var(--primary); }
+  .stage-flow .step.now { background: var(--primary); color: #fff; font-weight: 700; }
+  .stage-flow .arr { color: var(--muted); font-size: 12px; }
+  button.btn {
+    font-family: inherit; font-size: 13.5px; padding: 7px 14px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--primary); background: var(--primary); color: #fff;
+  }
+  button.btn.sub { background: #fff; color: var(--primary); }
+  button.btn.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+  button.btn.danger { background: #fff; color: var(--danger); border-color: var(--danger); }
+  button.btn.sm { font-size: 12.5px; padding: 4px 9px; }
+  button.btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; align-items: center; }
+  label.fld { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 3px; }
+  input[type=text], input[type=date], input[type=number], select, textarea {
+    font-family: inherit; font-size: 13.5px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px;
+    width: 100%; background: #fff; color: var(--ink);
+  }
+  textarea { min-height: 74px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid #b9cdea; border-color: var(--primary); }
+  .grid { display: grid; gap: 10px; }
+  .g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: 1fr 1fr 1fr; } .g4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 720px) { .g2, .g3, .g4 { grid-template-columns: 1fr; } }
+  .checks { display: flex; gap: 6px 14px; flex-wrap: wrap; }
+  .checks label { font-size: 13.5px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .alert-box { background: #fdecea; border: 1px solid #efb9b2; color: var(--danger); border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-size: 13.5px; }
+  .info-box { background: var(--primary-light); border: 1px solid #b9cdea; border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-size: 13.5px; }
+  .empty { text-align: center; padding: 46px 20px; color: var(--muted); }
+  .empty h2 { color: var(--ink); }
+  .chk-area { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .chk-area .hd { background: #eef2f7; padding: 8px 12px; font-weight: 700; font-size: 13.5px; }
+  .chk-area .bd { padding: 6px 12px; }
+  .chk-item { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px dashed #e7ebf0; }
+  .chk-item:last-child { border-bottom: none; }
+  .chk-item input { margin-top: 2px; }
+  .chk-item label { cursor: pointer; }
+  .chk-item .tag { color: var(--danger); font-size: 11.5px; font-weight: 700; margin-left: 6px; }
+  .overdue { color: var(--danger); font-weight: 700; }
+  .soon { color: var(--warn); font-weight: 700; }
+  .footer-note { margin-top: 26px; font-size: 12px; color: var(--muted); text-align: center; }
+  .log-item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+  .log-item .meta { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .log-item .content { white-space: pre-wrap; }
+  .log-item .next { margin-top: 6px; font-size: 12.5px; color: var(--warn); }
+  .mono-block { background: #f6f8fa; border: 1px solid var(--line); border-radius: 8px; padding: 12px; white-space: pre-wrap; font-size: 12.5px; max-height: 340px; overflow: auto; }
+
+  /* 인쇄 */
+  #print-area { display: none; }
+  @media print {
+    body { background: #fff; }
+    #app { display: none; }
+    #print-area { display: block; font-size: 12.5pt; }
+    #print-area table { width: 100%; }
+    #print-area th, #print-area td { border: 1px solid #333; padding: 6px 8px; }
+    #print-area h1 { font-size: 17pt; text-align: center; margin: 4px 0 18px; }
+    #print-area .doc-foot { margin-top: 26px; font-size: 9.5pt; color: #555; border-top: 1px solid #999; padding-top: 6px; }
+    #print-area .sign-table td { height: 52px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="title-row">
+      <h1>학생맞춤통합지원 업무 도우미</h1>
+      <span class="school" id="hd-school"></span>
+      <span class="spacer"></span>
+      <label style="font-size:12.5px; display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
+        <input type="checkbox" id="hd-mask" onchange="toggleMask(this.checked)"> 이름 가리기
+      </label>
+      <button class="btn sub sm" onclick="downloadBackup()">데이터 백업</button>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-v="dashboard" onclick="nav('dashboard')">대시보드</button>
+      <button data-v="students" onclick="nav('students')">학생 사례</button>
+      <button data-v="checklist" onclick="nav('checklist')">발굴 체크리스트</button>
+      <button data-v="meetings" onclick="nav('meetings')">지원팀 협의회</button>
+      <button data-v="resources" onclick="nav('resources')">자원 연계</button>
+      <button data-v="stats" onclick="nav('stats')">통계·보고</button>
+      <button data-v="data" onclick="nav('data')">데이터·설정</button>
+    </nav>
+  </header>
+  <div class="banner" id="privacy-banner">
+    <span>🔒</span>
+    <span>모든 데이터는 <b>이 컴퓨터의 브라우저 안에만</b> 저장되며 외부로 전송되지 않습니다.
+    학생 개인정보가 포함되므로 <b>공용 PC 사용을 피하고</b>, 화면 잠금과 주기적 백업(백업 파일도 안전한 곳에 보관)을 생활화해 주세요.
+    브라우저 데이터 삭제 시 기록이 사라질 수 있으니 <b>「데이터 백업」 버튼</b>을 자주 눌러 주세요.</span>
+    <button class="x" onclick="closeBanner()" title="닫기">✕</button>
+  </div>
+  <main id="view"></main>
+  <div class="footer-note">학생맞춤통합지원 업무 도우미 · 오프라인 단독 실행 · 마지막 저장: <span id="saved-at">-</span></div>
+</div>
+<div id="print-area"></div>
+
+<script>
+'use strict';
+
+/* ===================== 상수 ===================== */
+const AREAS = ['학업·진로', '심리·정서', '대인관계·학교폭력', '출결·학업중단', '가정·환경', '경제', '건강', '기타'];
+const LEVELS = ['관심', '지원필요', '집중지원'];
+const STAGES = ['발굴', '진단·파악', '계획수립', '지원실행', '모니터링', '종결'];
+const LOG_TYPES = ['학생상담', '보호자상담·가정연락', '교사협의', '지원팀회의', '교내지원(프로그램·물품 등)', '외부기관 연계', '모니터링', '기타'];
+const REFERRALS = ['담임교사 관찰', '교과교사 의뢰', '체크리스트(스크리닝)', '학생 본인 요청', '보호자 요청', '또래·친구 알림', '외부기관 통보', '기타'];
+
+const CHECKLIST = [
+  { area: '출결·학업중단', items: [
+    { id: 'AT1', text: '최근 1개월 내 무단결석·지각·조퇴가 잦다' },
+    { id: 'AT2', text: '특별한 사유 없이 결석이 3일 이상 이어진 적이 있다' },
+    { id: 'AT3', text: '학업중단(자퇴 등) 의사를 표현했거나 숙려제 대상이 되었다' },
+    { id: 'AT4', text: '등교는 하지만 수업 이탈(무단 외출, 보건실 장기 체류 등)이 잦다' },
+  ]},
+  { area: '학업·진로', items: [
+    { id: 'ST1', text: '기초학력이 부족하여 수업 내용을 따라가기 어려워한다' },
+    { id: 'ST2', text: '최근 성적이나 수업 참여도가 눈에 띄게 떨어졌다' },
+    { id: 'ST3', text: '과제 미제출·수행평가 포기가 반복된다' },
+    { id: 'ST4', text: '진로 계획이 전혀 없거나 심한 막막함을 호소한다' },
+    { id: 'ST5', text: '자격증 취득·현장실습 등 필수 과정 참여를 회피한다' },
+  ]},
+  { area: '심리·정서', items: [
+    { id: 'EM1', text: '무기력하거나 우울해 보이는 모습이 2주 이상 지속된다' },
+    { id: 'EM2', text: '불안·긴장이 심하거나 사소한 일에 과민하게 반응한다' },
+    { id: 'EM3', text: '감정 기복이 크고 분노 조절이 어려워 보인다' },
+    { id: 'EM4', text: '자해 흔적이 있거나 죽음·자살을 언급한 적이 있다', alert: '자살·자해 위험 징후입니다. 체크리스트 결과와 관계없이 즉시 관리자·전문상담(교)사에게 알리고, 위기 상담(자살예방 상담전화 109 등)과 보호자 연락 등 학교 위기 대응 절차를 우선 진행하세요.' },
+    { id: 'EM5', text: '수면 문제(불면·과다수면)나 식사 문제가 관찰된다' },
+    { id: 'EM6', text: '최근 큰 상실·사건(가족 사망, 사고 등)을 겪었다' },
+  ]},
+  { area: '대인관계·학교폭력', items: [
+    { id: 'RE1', text: '친구가 거의 없고 혼자 지내는 시간이 많다' },
+    { id: 'RE2', text: '괴롭힘·따돌림 피해가 의심되는 정황이 있다', alert: '학교폭력 피해 의심 정황입니다. 학교폭력 사안처리 절차(책임교사 보고 등)를 별도로 진행해야 합니다. 신고·상담 117.' },
+    { id: 'RE3', text: '또래·교사와의 갈등이 반복된다' },
+    { id: 'RE4', text: '사이버상 갈등·폭력(단체대화방 저격, SNS 비방 등) 정황이 있다', alert: '사이버폭력 의심 정황입니다. 학교폭력 사안처리 절차를 별도로 진행해야 합니다. 신고·상담 117.' },
+  ]},
+  { area: '가정·환경', items: [
+    { id: 'FA1', text: '보호자의 돌봄 공백(장기 부재, 방임 등)이 의심된다' },
+    { id: 'FA2', text: '학대(신체·정서·성·방임)가 의심되는 정황이 있다', alert: '아동학대 의심 정황입니다. 교직원은 신고의무자이므로 지체 없이 112에 신고해야 합니다(사례관리와 별개로 진행).' },
+    { id: 'FA3', text: '가족 간병, 동생 돌봄 등 과도한 가족 돌봄 부담이 있다' },
+    { id: 'FA4', text: '주거가 불안정하다(잦은 이사, 시설 거주, 가출 등)' },
+    { id: 'FA5', text: '가정 불화·해체(이혼, 별거 등)로 인한 어려움을 호소한다' },
+  ]},
+  { area: '경제', items: [
+    { id: 'EC1', text: '급식비·학용품·교복 등 기본 비용 지원이 필요해 보인다' },
+    { id: 'EC2', text: '생계형 아르바이트로 학업에 지장이 있다' },
+    { id: 'EC3', text: '공과금 체납, 단전·단수 등 생활고를 언급한 적이 있다' },
+    { id: 'EC4', text: '교육급여 등 복지제도 대상일 수 있으나 신청 여부가 확인되지 않는다' },
+  ]},
+  { area: '건강', items: [
+    { id: 'HE1', text: '질환이 있으나 치료·관리가 제대로 되지 않는 것 같다' },
+    { id: 'HE2', text: '시력·치아·피부 등 건강 문제가 방치되고 있다' },
+    { id: 'HE3', text: '위생 상태(의복, 씻지 못함 등)가 좋지 않다' },
+    { id: 'HE4', text: '흡연·음주·약물 등 유해물질 사용이 의심된다' },
+    { id: 'HE5', text: '스마트폰·인터넷·도박 과의존이 의심된다' },
+  ]},
+];
+const CHECK_INDEX = {};
+CHECKLIST.forEach(g => g.items.forEach(it => { CHECK_INDEX[it.id] = { area: g.area, text: it.text, alert: it.alert || '' }; }));
+
+const DEFAULT_RESOURCES = [
+  { kind: '교내', name: '담임·교과 교사 협의', category: '전체', contact: '', note: '수업·생활 관찰 정보 공유, 1차 지지자원' },
+  { kind: '교내', name: '전문상담(교)사·Wee클래스', category: '심리·정서', contact: '', note: '개인상담, 심리검사, 위기 개입' },
+  { kind: '교내', name: '보건교사(보건실)', category: '건강', contact: '', note: '건강 상태 확인, 의료기관 안내' },
+  { kind: '교내', name: '진로전담교사', category: '학업·진로', contact: '', note: '진로상담, 취업·현장실습 관련 지원' },
+  { kind: '교내', name: '교육복지사(배치교)', category: '가정·환경, 경제', contact: '', note: '교육복지우선지원사업 대상 관리, 지역 연계' },
+  { kind: '교내', name: '교내 장학·지원 사업', category: '경제', contact: '', note: '장학금, 급식·방과후 지원 등 (행정실·담당부서 확인)' },
+  { kind: '지역', name: '학생맞춤통합지원센터(교육지원청)', category: '전체', contact: '관할 교육지원청 확인', note: '학교 자체 해결이 어려운 사례의 심층 진단·지역자원 연계 요청 창구' },
+  { kind: '지역', name: 'Wee센터(교육지원청)', category: '심리·정서', contact: '관할 교육지원청 확인', note: '전문적 심리평가·상담 의뢰' },
+  { kind: '지역', name: '청소년상담복지센터', category: '심리·정서, 가정·환경', contact: '1388', note: '청소년 위기 상담, 통합지원(CYS-Net)' },
+  { kind: '지역', name: '정신건강복지센터(시·군·구)', category: '심리·정서, 건강', contact: '지역별 확인', note: '정신건강 사례관리, 치료 연계' },
+  { kind: '지역', name: '학교밖청소년지원센터(꿈드림)', category: '출결·학업중단', contact: '지역별 확인', note: '학업중단 (예정) 청소년 지원' },
+  { kind: '지역', name: '청소년쉼터', category: '가정·환경', contact: '1388 연계', note: '가출·주거 위기 청소년 보호' },
+  { kind: '지역', name: '행정복지센터(주민센터)', category: '경제', contact: '지역별 확인', note: '교육급여·긴급복지 등 복지제도 신청' },
+  { kind: '지역', name: '지역 장학재단·복지기관', category: '경제', contact: '지역별 확인', note: '장학금, 결연 후원, 물품 지원' },
+  { kind: '긴급', name: '아동학대 신고', category: '가정·환경', contact: '112', note: '교직원은 신고의무자' },
+  { kind: '긴급', name: '학교폭력 신고·상담', category: '대인관계·학교폭력', contact: '117', note: '' },
+  { kind: '긴급', name: '자살예방 상담전화', category: '심리·정서', contact: '109', note: '24시간' },
+  { kind: '긴급', name: '청소년전화', category: '전체', contact: '1388', note: '24시간, 문자·카카오톡 상담 병행' },
+  { kind: '긴급', name: '보건복지상담센터', category: '경제, 건강', contact: '129', note: '복지제도 전반 안내' },
+  { kind: '긴급', name: '여성긴급전화', category: '가정·환경', contact: '1366', note: '가정폭력·성폭력 피해' },
+];
+
+/* ===================== 상태 ===================== */
+const STORE_KEY = 'smtj_helper_v1';
+
+function defaultState() {
+  return {
+    version: 1,
+    seq: 1,
+    settings: { schoolName: '', teacherName: '', maskNames: false, bannerClosed: false },
+    students: [],
+    meetings: [],
+    resources: DEFAULT_RESOURCES.map(r => Object.assign({ id: uid() }, r)),
+  };
+}
+
+function uid() {
+  return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return defaultState();
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.students)) return defaultState();
+    d.settings = Object.assign({ schoolName: '', teacherName: '', maskNames: false, bannerClosed: false }, d.settings || {});
+    d.meetings = d.meetings || [];
+    d.resources = d.resources || [];
+    d.seq = d.seq || (d.students.length + 1);
+    return d;
+  } catch (e) { return defaultState(); }
+}
+
+let state = load();
+let ui = {
+  view: 'dashboard', studentId: null, studentTab: 'info', editingStudent: false,
+  editingMeeting: false, meetingId: null, editingResource: false, resourceId: null,
+  search: '', filterStage: '', filterArea: '', filterLevel: '',
+  resKind: '', resSearch: '',
+  scrStudent: '', scrChecked: {}, scrMemo: '', scrDate: '',
+  logEditId: null,
+};
+let lastStatsMd = '';
+let lastStatsTsv = '';
+
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    const el = document.getElementById('saved-at');
+    if (el) el.textContent = new Date().toLocaleString('ko-KR');
+  } catch (e) {
+    alert('저장에 실패했습니다. 브라우저 저장 공간이 부족할 수 있습니다.\n데이터 백업 후 오래된 기록을 정리해 주세요.\n' + e);
+  }
+}
+
+/* ===================== 유틸 ===================== */
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function today() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function schoolYearStart() {
+  const d = new Date();
+  const y = d.getMonth() + 1 >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+  return y + '-03-01';
+}
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function maskName(name) {
+  if (!name) return '';
+  if (name.length <= 1) return name;
+  if (name.length === 2) return name[0] + '○';
+  return name[0] + '○'.repeat(name.length - 2) + name[name.length - 1];
+}
+function dispName(s) {
+  const n = s.name || '(이름 미입력)';
+  return state.settings.maskNames && s.name ? maskName(s.name) : n;
+}
+function studentLabel(s) {
+  const cls = [s.grade && s.grade + '학년', s.klass && s.klass + '반', s.num && s.num + '번'].filter(Boolean).join(' ');
+  return '[' + s.code + '] ' + dispName(s) + (cls ? ' (' + cls + ')' : '');
+}
+function byId(arr, id) { return arr.find(x => x.id === id); }
+function getStudent(id) { return byId(state.students, id); }
+function val(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+function checkedVals(name) {
+  return Array.prototype.slice.call(document.querySelectorAll('input[name="' + name + '"]:checked')).map(el => el.value);
+}
+function download(filename, text, mime) {
+  const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+}
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => alert('복사되었습니다.'), () => fallbackCopy(text));
+  } else { fallbackCopy(text); }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); alert('복사되었습니다.'); }
+  catch (e) { alert('복사에 실패했습니다. 아래 내용을 직접 선택해 복사해 주세요.'); }
+  ta.remove();
+}
+function tsvCell(v) {
+  return String(v == null ? '' : v).replace(/\t/g, ' ').replace(/\r?\n/g, ' / ');
+}
+function toTsv(rows) {
+  return '\uFEFF' + rows.map(r => r.map(tsvCell).join('\t')).join('\r\n');
+}
+function optionList(arr, selected) {
+  return arr.map(o => '<option value="' + esc(o) + '"' + (o === selected ? ' selected' : '') + '>' + esc(o) + '</option>').join('');
+}
+function areaPills(areas) {
+  return (areas || []).map(a => '<span class="pill area">' + esc(a) + '</span>').join('');
+}
+function latestLogDate(s) {
+  let d = s.openedAt || '';
+  (s.logs || []).forEach(l => { if (l.date > d) d = l.date; });
+  return d;
+}
+
+/* ===================== 네비게이션 ===================== */
+function nav(v) {
+  ui.view = v;
+  ui.editingStudent = false;
+  ui.studentId = null;
+  ui.logEditId = null;
+  ui.editingMeeting = false;
+  ui.meetingId = null;
+  ui.editingResource = false;
+  ui.resourceId = null;
+  render();
+}
+function toggleMask(on) {
+  state.settings.maskNames = !!on;
+  save();
+  render();
+}
+function closeBanner() {
+  state.settings.bannerClosed = true;
+  save();
+  applyBanner();
+}
+function applyBanner() {
+  document.getElementById('privacy-banner').style.display = state.settings.bannerClosed ? 'none' : 'flex';
+}
+
+function render() {
+  document.querySelectorAll('#tabs button').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-v') === ui.view);
+  });
+  document.getElementById('hd-school').textContent = state.settings.schoolName || '';
+  document.getElementById('hd-mask').checked = !!state.settings.maskNames;
+  const v = document.getElementById('view');
+  if (ui.view === 'dashboard') v.innerHTML = renderDashboard();
+  else if (ui.view === 'students') v.innerHTML = renderStudents();
+  else if (ui.view === 'checklist') v.innerHTML = renderChecklist();
+  else if (ui.view === 'meetings') v.innerHTML = renderMeetings();
+  else if (ui.view === 'resources') v.innerHTML = renderResources();
+  else if (ui.view === 'stats') v.innerHTML = renderStats();
+  else if (ui.view === 'data') v.innerHTML = renderData();
+  window.scrollTo(0, 0);
+}
+
+/* ===================== 대시보드 ===================== */
+function pendingActions() {
+  const list = [];
+  const limit = addDays(today(), 7);
+  state.students.forEach(s => {
+    if (s.stage === '종결') return;
+    (s.logs || []).forEach(l => {
+      if (l.nextDate && l.nextDate <= limit) {
+        list.push({ student: s, log: l });
+      }
+    });
+  });
+  list.sort((a, b) => a.log.nextDate < b.log.nextDate ? -1 : 1);
+  return list;
+}
+function staleStudents() {
+  const cut = addDays(today(), -30);
+  return state.students.filter(s => s.stage !== '종결' && latestLogDate(s) < cut);
+}
+
+function renderDashboard() {
+  const active = state.students.filter(s => s.stage !== '종결');
+  if (state.students.length === 0) {
+    return '<div class="card empty">' +
+      '<h2>학생맞춤통합지원 사례관리를 시작해 보세요</h2>' +
+      '<p>복합적 어려움이 있는 학생을 발굴하고, 진단·지원계획·지원기록·통계까지 한곳에서 관리합니다.<br>' +
+      '모든 데이터는 이 컴퓨터에만 저장됩니다.</p>' +
+      '<div class="btn-row" style="justify-content:center;">' +
+      '<button class="btn" onclick="nav(\'students\'); showStudentForm(null)">첫 학생 사례 등록</button>' +
+      '<button class="btn sub" onclick="nav(\'checklist\')">체크리스트로 발굴 시작</button>' +
+      '<button class="btn ghost" onclick="loadSampleData()">가상 예시 데이터로 둘러보기</button>' +
+      '</div></div>';
+  }
+  const intensive = active.filter(s => s.level === '집중지원');
+  const acts = pendingActions();
+  const overdue = acts.filter(a => a.log.nextDate < today());
+  const stale = staleStudents();
+  const noConsent = active.filter(s => !(s.consent && s.consent.collected));
+
+  let h = '<div class="cards">' +
+    '<div class="stat-card"><div class="num">' + active.length + '</div><div class="lbl">진행 중 사례</div></div>' +
+    '<div class="stat-card red"><div class="num">' + intensive.length + '</div><div class="lbl">집중지원 사례</div></div>' +
+    '<div class="stat-card amber"><div class="num">' + acts.length + '</div><div class="lbl">7일 내 조치 예정(지연 ' + overdue.length + ')</div></div>' +
+    '<div class="stat-card amber"><div class="num">' + stale.length + '</div><div class="lbl">30일 이상 기록 없음</div></div>' +
+    '<div class="stat-card ' + (noConsent.length ? 'red' : 'green') + '"><div class="num">' + noConsent.length + '</div><div class="lbl">개인정보 동의 미확인</div></div>' +
+    '</div>';
+
+  h += '<h2>단계별 현황</h2><div class="card"><div class="stage-flow">';
+  STAGES.forEach((st, i) => {
+    const n = state.students.filter(s => s.stage === st).length;
+    h += '<span class="step' + (n > 0 ? ' done' : '') + '">' + esc(st) + ' <b>' + n + '</b></span>';
+    if (i < STAGES.length - 1) h += '<span class="arr">▶</span>';
+  });
+  h += '</div></div>';
+
+  h += '<h2>다가오는 조치 (오늘부터 7일, 지연 포함)</h2>';
+  if (acts.length === 0) {
+    h += '<div class="card muted">예정된 조치가 없습니다. 지원 기록을 남길 때 「다음 조치 예정일」을 입력하면 여기에 표시됩니다.</div>';
+  } else {
+    h += '<div class="card table-wrap"><table><tr><th>예정일</th><th>학생</th><th>다음 조치</th><th>최근 기록</th></tr>';
+    acts.slice(0, 15).forEach(a => {
+      const cls = a.log.nextDate < today() ? 'overdue' : (a.log.nextDate <= addDays(today(), 2) ? 'soon' : '');
+      h += '<tr class="clickable" onclick="openStudent(\'' + a.student.id + '\')">' +
+        '<td class="' + cls + '">' + esc(a.log.nextDate) + (a.log.nextDate < today() ? ' (지연)' : '') + '</td>' +
+        '<td>' + esc(studentLabel(a.student)) + '</td>' +
+        '<td>' + esc(a.log.nextAction || '(내용 미입력)') + '</td>' +
+        '<td class="muted">' + esc(a.log.date) + ' ' + esc(a.log.type) + '</td></tr>';
+    });
+    h += '</table><div class="muted" style="margin-top:6px;">조치를 마치면 해당 기록을 열어 예정일을 지우거나, 새 기록을 남기고 예정일을 갱신해 주세요.</div></div>';
+  }
+
+  if (stale.length > 0) {
+    h += '<h2>오래 들여다보지 못한 사례</h2><div class="card table-wrap"><table><tr><th>학생</th><th>단계</th><th>마지막 기록일</th></tr>';
+    stale.forEach(s => {
+      h += '<tr class="clickable" onclick="openStudent(\'' + s.id + '\')"><td>' + esc(studentLabel(s)) + '</td><td>' + esc(s.stage) + '</td><td class="overdue">' + esc(latestLogDate(s) || '-') + '</td></tr>';
+    });
+    h += '</table></div>';
+  }
+  return h;
+}
+function openStudent(id) {
+  ui.view = 'students';
+  ui.studentId = id;
+  ui.studentTab = 'info';
+  ui.editingStudent = false;
+  ui.logEditId = null;
+  render();
+}
+
+/* ===================== 학생 사례 ===================== */
+function renderStudents() {
+  if (ui.editingStudent) return renderStudentForm(ui.studentId ? getStudent(ui.studentId) : null);
+  if (ui.studentId) {
+    const s = getStudent(ui.studentId);
+    if (s) return renderStudentDetail(s);
+    ui.studentId = null;
+  }
+  return renderStudentList();
+}
+
+function studentMatches(s) {
+  if (ui.filterStage && s.stage !== ui.filterStage) return false;
+  if (ui.filterLevel && s.level !== ui.filterLevel) return false;
+  if (ui.filterArea && (s.areas || []).indexOf(ui.filterArea) < 0) return false;
+  if (ui.search) {
+    const q = ui.search.toLowerCase();
+    const hay = [s.code, s.name, s.grade, s.klass, s.num, s.homeroom, s.manager, s.summary].join(' ').toLowerCase();
+    if (hay.indexOf(q) < 0) return false;
+  }
+  return true;
+}
+
+function studentRowsHtml() {
+  const list = state.students.filter(studentMatches);
+  list.sort((a, b) => (a.stage === '종결') - (b.stage === '종결') || (a.code < b.code ? -1 : 1));
+  if (list.length === 0) return '<tr><td colspan="7" class="muted">조건에 맞는 학생이 없습니다.</td></tr>';
+  return list.map(s => {
+    return '<tr class="clickable" onclick="openStudent(\'' + s.id + '\')">' +
+      '<td>' + esc(s.code) + '</td>' +
+      '<td>' + esc(dispName(s)) + '</td>' +
+      '<td>' + esc([s.grade, s.klass, s.num].filter(Boolean).join('-')) + '</td>' +
+      '<td><span class="pill level-' + esc(s.level) + '">' + esc(s.level) + '</span></td>' +
+      '<td><span class="pill stage' + (s.stage === '종결' ? ' stage-종결' : '') + '">' + esc(s.stage) + '</span></td>' +
+      '<td>' + areaPills(s.areas) + '</td>' +
+      '<td class="muted">' + esc(latestLogDate(s) || '-') + '</td></tr>';
+  }).join('');
+}
+
+function refreshStudentRows() {
+  const el = document.getElementById('student-rows');
+  if (el) el.innerHTML = studentRowsHtml();
+}
+function onSearchInput(el) { ui.search = el.value.trim(); refreshStudentRows(); }
+function setFilter(key, v) {
+  if (key === 'stage') ui.filterStage = v;
+  else if (key === 'area') ui.filterArea = v;
+  else if (key === 'level') ui.filterLevel = v;
+  refreshStudentRows();
+}
+
+function renderStudentList() {
+  let h = '<div class="btn-row"><button class="btn" onclick="showStudentForm(null)">+ 새 학생 사례 등록</button>' +
+    '<span class="muted">행을 누르면 상세 화면이 열립니다. 총 ' + state.students.length + '명</span></div>';
+  h += '<div class="card"><div class="grid g4" style="margin-bottom:10px;">' +
+    '<div><label class="fld">검색(이름·관리번호·학반 등)</label><input type="text" value="' + esc(ui.search) + '" oninput="onSearchInput(this)"></div>' +
+    '<div><label class="fld">단계</label><select onchange="setFilter(\'stage\', this.value)"><option value="">전체</option>' + optionList(STAGES, ui.filterStage) + '</select></div>' +
+    '<div><label class="fld">위기 수준</label><select onchange="setFilter(\'level\', this.value)"><option value="">전체</option>' + optionList(LEVELS, ui.filterLevel) + '</select></div>' +
+    '<div><label class="fld">위기 영역</label><select onchange="setFilter(\'area\', this.value)"><option value="">전체</option>' + optionList(AREAS, ui.filterArea) + '</select></div>' +
+    '</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>관리번호</th><th>이름</th><th>학반</th><th>수준</th><th>단계</th><th>위기 영역</th><th>최근 기록</th></tr></thead>' +
+    '<tbody id="student-rows">' + studentRowsHtml() + '</tbody></table></div></div>';
+  return h;
+}
+
+function showStudentForm(id) {
+  ui.view = 'students';
+  ui.studentId = id;
+  ui.editingStudent = true;
+  render();
+}
+function cancelStudentForm() {
+  ui.editingStudent = false;
+  render();
+}
+
+function renderStudentForm(s) {
+  const isNew = !s;
+  const d = s || { code: '', name: '', grade: '', klass: '', num: '', homeroom: '', manager: state.settings.teacherName || '',
+    referralPath: REFERRALS[0], areas: [], level: '관심', stage: '발굴', openedAt: today(),
+    consent: { collected: false, date: '', note: '' }, summary: '' };
+  let h = '<h2>' + (isNew ? '새 학생 사례 등록' : '학생 정보 수정') + '</h2><div class="card">';
+  h += '<div class="info-box">이름은 반드시 실명일 필요가 없습니다. 필요 시 별칭·초성으로 입력하고, 문서 출력 시에만 실명을 기재하는 방식도 가능합니다.</div>';
+  h += '<div class="grid g4">' +
+    '<div><label class="fld">이름</label><input type="text" id="f-name" value="' + esc(d.name) + '"></div>' +
+    '<div><label class="fld">학년</label><input type="text" id="f-grade" value="' + esc(d.grade) + '" placeholder="예: 1"></div>' +
+    '<div><label class="fld">반</label><input type="text" id="f-klass" value="' + esc(d.klass) + '" placeholder="예: 3"></div>' +
+    '<div><label class="fld">번호</label><input type="text" id="f-num" value="' + esc(d.num) + '"></div></div>' +
+    '<div class="grid g4" style="margin-top:10px;">' +
+    '<div><label class="fld">담임교사</label><input type="text" id="f-homeroom" value="' + esc(d.homeroom) + '"></div>' +
+    '<div><label class="fld">담당자(사례관리)</label><input type="text" id="f-manager" value="' + esc(d.manager) + '"></div>' +
+    '<div><label class="fld">발굴 경로</label><select id="f-referral">' + optionList(REFERRALS, d.referralPath) + '</select></div>' +
+    '<div><label class="fld">등록일</label><input type="date" id="f-opened" value="' + esc(d.openedAt) + '"></div></div>';
+  h += '<h3>위기 영역 (복수 선택)</h3><div class="checks">' +
+    AREAS.map(a => '<label><input type="checkbox" name="f-areas" value="' + esc(a) + '"' + ((d.areas || []).indexOf(a) >= 0 ? ' checked' : '') + '> ' + esc(a) + '</label>').join('') + '</div>';
+  h += '<div class="grid g2" style="margin-top:10px;">' +
+    '<div><label class="fld">위기 수준</label><select id="f-level">' + optionList(LEVELS, d.level) + '</select></div>' +
+    '<div><label class="fld">진행 단계</label><select id="f-stage">' + optionList(STAGES, d.stage) + '</select></div></div>';
+  h += '<div style="margin-top:10px;"><label class="fld">상황 요약 (관찰 내용, 어려움, 강점 등)</label><textarea id="f-summary">' + esc(d.summary) + '</textarea></div>';
+  h += '<h3>개인정보 수집·이용 동의</h3><div class="grid g3">' +
+    '<div><label class="fld">동의 확보 여부</label><label style="font-size:13.5px;"><input type="checkbox" id="f-consent"' + (d.consent && d.consent.collected ? ' checked' : '') + '> 학생·보호자 동의 확보</label></div>' +
+    '<div><label class="fld">동의일</label><input type="date" id="f-consent-date" value="' + esc(d.consent ? d.consent.date : '') + '"></div>' +
+    '<div><label class="fld">비고(동의 방식 등)</label><input type="text" id="f-consent-note" value="' + esc(d.consent ? d.consent.note : '') + '"></div></div>' +
+    '<div class="muted" style="margin-top:6px;">동의서 서식은 저장소의 templates 폴더를 참고하세요. 법령상 처리 근거·동의 요건은 학교 개인정보 보호 담당자와 확인해 주세요.</div>';
+  h += '<div class="btn-row" style="margin-top:14px;">' +
+    '<button class="btn" onclick="saveStudent()">' + (isNew ? '등록' : '저장') + '</button>' +
+    '<button class="btn ghost" onclick="cancelStudentForm()">취소</button></div>';
+  h += '</div>';
+  return h;
+}
+
+function saveStudent() {
+  const isNew = !ui.studentId;
+  const s = isNew ? {
+    id: uid(),
+    code: new Date().getFullYear() + '-' + String(state.seq).padStart(3, '0'),
+    logs: [], screenings: [],
+    plan: { goals: '', inSchool: '', external: '', period: '', reviewDate: '' },
+    closedAt: '',
+  } : getStudent(ui.studentId);
+  if (!s) return;
+  s.name = val('f-name');
+  s.grade = val('f-grade');
+  s.klass = val('f-klass');
+  s.num = val('f-num');
+  s.homeroom = val('f-homeroom');
+  s.manager = val('f-manager');
+  s.referralPath = val('f-referral');
+  s.openedAt = val('f-opened') || today();
+  s.areas = checkedVals('f-areas');
+  s.level = val('f-level');
+  const newStage = val('f-stage');
+  applyStage(s, newStage);
+  s.summary = val('f-summary');
+  s.consent = {
+    collected: document.getElementById('f-consent').checked,
+    date: val('f-consent-date'),
+    note: val('f-consent-note'),
+  };
+  if (isNew) {
+    state.seq += 1;
+    state.students.push(s);
+    ui.studentId = s.id;
+  }
+  ui.editingStudent = false;
+  save();
+  render();
+}
+
+function applyStage(s, newStage) {
+  if (STAGES.indexOf(newStage) < 0) return;
+  if (newStage === '종결' && s.stage !== '종결') s.closedAt = today();
+  if (newStage !== '종결') s.closedAt = '';
+  s.stage = newStage;
+}
+
+function deleteStudent() {
+  const s = getStudent(ui.studentId);
+  if (!s) return;
+  if (!confirm('[' + s.code + '] 사례를 삭제합니다. 기록·스크리닝 결과가 모두 지워지며 되돌릴 수 없습니다.\n계속할까요?')) return;
+  if (!confirm('정말 삭제할까요? 종결 처리(기록 보존)로 충분하다면 취소를 누르세요.')) return;
+  state.students = state.students.filter(x => x.id !== s.id);
+  ui.studentId = null;
+  save();
+  render();
+}
+
+function backToList() { ui.studentId = null; ui.editingStudent = false; render(); }
+function setStudentTab(t) { ui.studentTab = t; ui.logEditId = null; render(); }
+function editStudent() { ui.editingStudent = true; render(); }
+
+function setStageSel(v) {
+  const s = getStudent(ui.studentId);
+  if (!s) return;
+  applyStage(s, v);
+  save();
+  render();
+}
+function advanceStage() {
+  const s = getStudent(ui.studentId);
+  if (!s) return;
+  const i = STAGES.indexOf(s.stage);
+  if (i < 0 || i >= STAGES.length - 1) return;
+  applyStage(s, STAGES[i + 1]);
+  save();
+  render();
+}
+
+function renderStudentDetail(s) {
+  let h = '<div class="btn-row"><button class="btn ghost sm" onclick="backToList()">← 목록</button>' +
+    '<button class="btn sub sm" onclick="editStudent()">정보 수정</button>' +
+    '<button class="btn sub sm" onclick="printPlan(\'' + s.id + '\')">지원계획서 인쇄</button>' +
+    '<button class="btn sub sm" onclick="printCaseSummary(\'' + s.id + '\')">사례 요약 인쇄</button>' +
+    '<button class="btn danger sm" onclick="deleteStudent()">삭제</button></div>';
+
+  h += '<div class="card"><div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">' +
+    '<b style="font-size:16px;">' + esc(studentLabel(s)) + '</b>' +
+    '<span class="pill level-' + esc(s.level) + '">' + esc(s.level) + '</span>' + areaPills(s.areas) +
+    '<span class="spacer" style="flex:1;"></span>' +
+    '<label class="fld" style="margin:0;">단계</label>' +
+    '<select style="width:auto;" onchange="setStageSel(this.value)">' + optionList(STAGES, s.stage) + '</select>' +
+    (s.stage !== '종결' ? '<button class="btn sm" onclick="advanceStage()">다음 단계로 ▶</button>' : '') +
+    '</div>';
+  h += '<div class="stage-flow" style="margin-top:10px;">';
+  const cur = STAGES.indexOf(s.stage);
+  STAGES.forEach((st, i) => {
+    h += '<span class="step' + (i < cur ? ' done' : i === cur ? ' now' : '') + '">' + esc(st) + '</span>';
+    if (i < STAGES.length - 1) h += '<span class="arr">▶</span>';
+  });
+  h += '</div>';
+  if (!(s.consent && s.consent.collected)) {
+    h += '<div class="alert-box">개인정보 수집·이용 동의가 아직 확인되지 않았습니다. 정보 수정 화면에서 동의 확보 여부를 기록해 주세요. (동의서 서식: templates 폴더)</div>';
+  }
+  h += '</div>';
+
+  const tabs = [['info', '기본 정보'], ['plan', '지원 계획'], ['logs', '지원 기록 (' + (s.logs || []).length + ')'], ['scr', '스크리닝 (' + (s.screenings || []).length + ')']];
+  h += '<div class="tabs" style="border-bottom-color: var(--line);">' + tabs.map(t =>
+    '<button class="' + (ui.studentTab === t[0] ? 'active' : '') + '" onclick="setStudentTab(\'' + t[0] + '\')">' + t[1] + '</button>').join('') + '</div>';
+
+  if (ui.studentTab === 'info') h += renderStudentInfo(s);
+  else if (ui.studentTab === 'plan') h += renderStudentPlan(s);
+  else if (ui.studentTab === 'logs') h += renderStudentLogs(s);
+  else if (ui.studentTab === 'scr') h += renderStudentScreenings(s);
+  return h;
+}
+
+function renderStudentInfo(s) {
+  return '<div class="card"><div class="table-wrap"><table>' +
+    '<tr><th style="width:130px;">관리번호</th><td>' + esc(s.code) + '</td><th style="width:130px;">등록일</th><td>' + esc(s.openedAt) + '</td></tr>' +
+    '<tr><th>담임교사</th><td>' + esc(s.homeroom || '-') + '</td><th>담당자</th><td>' + esc(s.manager || '-') + '</td></tr>' +
+    '<tr><th>발굴 경로</th><td>' + esc(s.referralPath || '-') + '</td><th>종결일</th><td>' + esc(s.closedAt || '-') + '</td></tr>' +
+    '<tr><th>동의 확보</th><td>' + (s.consent && s.consent.collected ? '예 (' + esc(s.consent.date || '일자 미입력') + ')' : '<span class="overdue">미확인</span>') + '</td>' +
+    '<th>동의 비고</th><td>' + esc((s.consent && s.consent.note) || '-') + '</td></tr>' +
+    '<tr><th>상황 요약</th><td colspan="3" style="white-space:pre-wrap;">' + esc(s.summary || '-') + '</td></tr>' +
+    '</table></div></div>';
+}
+
+function renderStudentPlan(s) {
+  const p = s.plan || { goals: '', inSchool: '', external: '', period: '', reviewDate: '' };
+  return '<div class="card">' +
+    '<div class="muted" style="margin-bottom:8px;">지원팀 협의를 거쳐 확정한 내용을 입력하세요. 「지원계획서 인쇄」 버튼으로 결재·보관용 문서를 출력할 수 있습니다.</div>' +
+    '<div><label class="fld">지원 목표</label><textarea id="p-goals">' + esc(p.goals) + '</textarea></div>' +
+    '<div class="grid g2" style="margin-top:10px;">' +
+    '<div><label class="fld">교내 지원 내용 (담당·주기 포함)</label><textarea id="p-inschool">' + esc(p.inSchool) + '</textarea></div>' +
+    '<div><label class="fld">외부기관 연계 내용</label><textarea id="p-external">' + esc(p.external) + '</textarea></div></div>' +
+    '<div class="grid g2" style="margin-top:10px;">' +
+    '<div><label class="fld">지원 기간</label><input type="text" id="p-period" value="' + esc(p.period) + '" placeholder="예: 2026.9. ~ 2026.12."></div>' +
+    '<div><label class="fld">중간 점검 예정일</label><input type="date" id="p-review" value="' + esc(p.reviewDate) + '"></div></div>' +
+    '<div class="btn-row" style="margin-top:12px;"><button class="btn" onclick="savePlan()">지원 계획 저장</button>' +
+    '<button class="btn sub" onclick="printPlan(\'' + s.id + '\')">지원계획서 인쇄</button></div></div>';
+}
+function savePlan() {
+  const s = getStudent(ui.studentId);
+  if (!s) return;
+  s.plan = {
+    goals: val('p-goals'), inSchool: val('p-inschool'), external: val('p-external'),
+    period: val('p-period'), reviewDate: val('p-review'),
+  };
+  save();
+  alert('지원 계획이 저장되었습니다.');
+}
+
+function renderStudentLogs(s) {
+  const editing = ui.logEditId ? (s.logs || []).find(l => l.id === ui.logEditId) : null;
+  const d = editing || { date: today(), type: LOG_TYPES[0], content: '', nextDate: '', nextAction: '', writer: s.manager || state.settings.teacherName || '' };
+  let h = '<div class="card"><h3 style="margin-top:0;">' + (editing ? '기록 수정' : '새 지원 기록') + '</h3>' +
+    '<div class="grid g3">' +
+    '<div><label class="fld">일자</label><input type="date" id="l-date" value="' + esc(d.date) + '"></div>' +
+    '<div><label class="fld">유형</label><select id="l-type">' + optionList(LOG_TYPES, d.type) + '</select></div>' +
+    '<div><label class="fld">기록자</label><input type="text" id="l-writer" value="' + esc(d.writer) + '"></div></div>' +
+    '<div style="margin-top:10px;"><label class="fld">내용 (사실 위주로 간결하게. 민감한 정보는 필요한 만큼만)</label><textarea id="l-content">' + esc(d.content) + '</textarea></div>' +
+    '<div class="grid g2" style="margin-top:10px;">' +
+    '<div><label class="fld">다음 조치 예정일 (대시보드 알림에 사용)</label><input type="date" id="l-next-date" value="' + esc(d.nextDate) + '"></div>' +
+    '<div><label class="fld">다음 조치 내용</label><input type="text" id="l-next-action" value="' + esc(d.nextAction) + '"></div></div>' +
+    '<div class="btn-row" style="margin-top:12px;">' +
+    '<button class="btn" onclick="saveLog()">' + (editing ? '수정 저장' : '기록 추가') + '</button>' +
+    (editing ? '<button class="btn ghost" onclick="cancelLogEdit()">취소</button>' : '') +
+    '</div></div>';
+
+  const logs = (s.logs || []).slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  if (logs.length === 0) h += '<div class="card muted">아직 기록이 없습니다.</div>';
+  else {
+    h += logs.map(l => '<div class="log-item">' +
+      '<div class="meta"><b>' + esc(l.date) + '</b><span class="pill stage">' + esc(l.type) + '</span><span>' + esc(l.writer || '') + '</span>' +
+      '<span style="margin-left:auto;"></span>' +
+      '<button class="btn ghost sm" onclick="editLog(\'' + l.id + '\')">수정</button>' +
+      '<button class="btn danger sm" onclick="deleteLog(\'' + l.id + '\')">삭제</button></div>' +
+      '<div class="content">' + esc(l.content) + '</div>' +
+      (l.nextDate || l.nextAction ? '<div class="next">다음 조치: ' + esc(l.nextDate || '') + ' ' + esc(l.nextAction || '') + '</div>' : '') +
+      '</div>').join('');
+  }
+  return h;
+}
+function saveLog() {
+  const s = getStudent(ui.studentId);
+  if (!s) return;
+  const content = val('l-content');
+  if (!content) { alert('내용을 입력해 주세요.'); return; }
+  const data = {
+    date: val('l-date') || today(), type: val('l-type'), content: content,
+    nextDate: val('l-next-date'), nextAction: val('l-next-action'), writer: val('l-writer'),
+  };
+  if (ui.logEditId) {
+    const l = (s.logs || []).find(x => x.id === ui.logEditId);
+    if (l) Object.assign(l, data);
+    ui.logEditId = null;
+  } else {
+    s.logs = s.logs || [];
+    s.logs.push(Object.assign({ id: uid() }, data));
+  }
+  save();
+  render();
+}
+function editLog(id) { ui.logEditId = id; render(); }
+function cancelLogEdit() { ui.logEditId = null; render(); }
+function deleteLog(id) {
+  const s = getStudent(ui.studentId);
+  if (!s) return;
+  if (!confirm('이 기록을 삭제할까요?')) return;
+  s.logs = (s.logs || []).filter(l => l.id !== id);
+  if (ui.logEditId === id) ui.logEditId = null;
+  save();
+  render();
+}
+
+function renderStudentScreenings(s) {
+  const list = (s.screenings || []).slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  let h = '<div class="card"><div class="btn-row" style="margin:0 0 8px;">' +
+    '<button class="btn sub sm" onclick="goChecklistFor(\'' + s.id + '\')">이 학생으로 체크리스트 실시</button></div>';
+  if (list.length === 0) h += '<div class="muted">실시한 체크리스트가 없습니다.</div>';
+  else {
+    h += '<div class="table-wrap"><table><tr><th>실시일</th><th>체크 문항 수</th><th>해당 영역</th><th>메모</th><th></th></tr>';
+    list.forEach(sc => {
+      const areas = screeningAreas(sc.checkedIds);
+      h += '<tr><td>' + esc(sc.date) + '</td><td>' + sc.checkedIds.length + '</td>' +
+        '<td>' + areaPills(Object.keys(areas)) + '</td><td>' + esc(sc.memo || '') + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn ghost sm" onclick="printScreeningRow(\'' + s.id + '\',\'' + sc.id + '\')">인쇄</button> ' +
+        '<button class="btn danger sm" onclick="deleteScreening(\'' + s.id + '\',\'' + sc.id + '\')">삭제</button></td></tr>';
+    });
+    h += '</table></div>';
+  }
+  h += '</div>';
+  return h;
+}
+function deleteScreening(studentId, scrId) {
+  const s = getStudent(studentId);
+  if (!s) return;
+  if (!confirm('이 스크리닝 결과를 삭제할까요?')) return;
+  s.screenings = (s.screenings || []).filter(x => x.id !== scrId);
+  save();
+  render();
+}
+function goChecklistFor(studentId) {
+  ui.view = 'checklist';
+  ui.scrStudent = studentId;
+  ui.scrChecked = {};
+  ui.scrMemo = '';
+  ui.scrDate = today();
+  render();
+}
+
+/* ===================== 발굴 체크리스트 ===================== */
+function screeningAreas(checkedIds) {
+  const areas = {};
+  (checkedIds || []).forEach(id => {
+    const it = CHECK_INDEX[id];
+    if (it) areas[it.area] = (areas[it.area] || 0) + 1;
+  });
+  return areas;
+}
+
+function renderChecklist() {
+  const active = state.students.filter(s => s.stage !== '종결');
+  let h = '<h2>위기 징후 발굴 체크리스트</h2>' +
+    '<div class="info-box">담임·교과 교사의 일상 관찰을 바탕으로 해당하는 문항에 체크하세요. 문항 수가 많다고 반드시 위기인 것은 아니며, ' +
+    '결과는 지원팀 협의의 <b>참고자료</b>입니다. 빨간 표시(즉시 대응) 문항은 체크 즉시 별도 절차 안내가 표시됩니다.' +
+    '<br><span class="muted">※ 이 문항은 참고용 자체 서식입니다. 교육부·교육청 공식 진단도구가 배포된 경우 그것을 우선 사용하세요.</span></div>';
+
+  h += '<div class="card"><div class="grid g3">' +
+    '<div><label class="fld">대상 학생 (등록된 사례)</label><select id="scr-student" onchange="ui.scrStudent=this.value">' +
+    '<option value="">(선택 안 함 — 결과 저장하려면 선택)</option>' +
+    active.map(s => '<option value="' + s.id + '"' + (ui.scrStudent === s.id ? ' selected' : '') + '>' + esc(studentLabel(s)) + '</option>').join('') +
+    '</select></div>' +
+    '<div><label class="fld">실시일</label><input type="date" id="scr-date" value="' + esc(ui.scrDate || today()) + '" onchange="ui.scrDate=this.value"></div>' +
+    '<div><label class="fld">미등록 학생이라면</label><div class="btn-row" style="margin:0;"><button class="btn sub sm" onclick="showStudentForm(null)">먼저 사례 등록</button></div></div>' +
+    '</div></div>';
+
+  h += CHECKLIST.map(g => {
+    return '<div class="chk-area"><div class="hd">' + esc(g.area) + '</div><div class="bd">' +
+      g.items.map(it => '<div class="chk-item">' +
+        '<input type="checkbox" id="chk-' + it.id + '"' + (ui.scrChecked[it.id] ? ' checked' : '') + ' onchange="toggleCheck(\'' + it.id + '\', this.checked)">' +
+        '<label for="chk-' + it.id + '">' + esc(it.text) + (it.alert ? '<span class="tag">⚠ 즉시 대응</span>' : '') + '</label>' +
+        '</div>').join('') +
+      '</div></div>';
+  }).join('');
+
+  h += '<div class="card"><label class="fld">메모 (관찰 근거, 참고 사항)</label>' +
+    '<textarea id="scr-memo" oninput="ui.scrMemo=this.value">' + esc(ui.scrMemo) + '</textarea></div>';
+
+  h += '<div id="scr-summary">' + checklistSummaryHtml() + '</div>';
+
+  h += '<div class="btn-row">' +
+    '<button class="btn" onclick="saveScreening()">결과 저장 (선택한 학생에게)</button>' +
+    '<button class="btn sub" onclick="printScreeningCurrent()">결과 인쇄</button>' +
+    '<button class="btn ghost" onclick="resetScreening()">초기화</button></div>';
+  return h;
+}
+function toggleCheck(id, on) {
+  if (on) ui.scrChecked[id] = true; else delete ui.scrChecked[id];
+  const el = document.getElementById('scr-summary');
+  if (el) el.innerHTML = checklistSummaryHtml();
+}
+function checklistSummaryHtml() {
+  const ids = Object.keys(ui.scrChecked);
+  const areas = screeningAreas(ids);
+  const alerts = ids.map(id => CHECK_INDEX[id]).filter(it => it && it.alert);
+  let h = '<div class="card"><h3 style="margin-top:0;">실시간 요약</h3>';
+  if (ids.length === 0) h += '<div class="muted">체크된 문항이 없습니다.</div>';
+  else {
+    h += '<div>총 <b>' + ids.length + '</b>개 문항 체크 · 해당 영역: ' +
+      Object.keys(areas).map(a => '<span class="pill area">' + esc(a) + ' ' + areas[a] + '</span>').join(' ') + '</div>' +
+      '<div class="muted" style="margin-top:6px;">체크된 영역은 사례 등록 시 「위기 영역」 입력의 참고가 됩니다.</div>';
+  }
+  alerts.forEach(it => { h += '<div class="alert-box">⚠ ' + esc(it.alert) + '</div>'; });
+  h += '</div>';
+  return h;
+}
+function saveScreening() {
+  const sid = ui.scrStudent;
+  if (!sid) { alert('결과를 저장할 학생을 먼저 선택하세요.\n미등록 학생이라면 「먼저 사례 등록」 버튼으로 등록 후 실시해 주세요.'); return; }
+  const s = getStudent(sid);
+  if (!s) { alert('학생을 찾을 수 없습니다.'); return; }
+  const ids = Object.keys(ui.scrChecked);
+  if (ids.length === 0 && !confirm('체크된 문항이 없습니다. 그래도 저장할까요?')) return;
+  s.screenings = s.screenings || [];
+  s.screenings.push({ id: uid(), date: ui.scrDate || today(), checkedIds: ids, memo: ui.scrMemo || '' });
+  const areas = Object.keys(screeningAreas(ids));
+  areas.forEach(a => { if ((s.areas || []).indexOf(a) < 0) { s.areas = s.areas || []; s.areas.push(a); } });
+  save();
+  alert('저장되었습니다. 체크된 영역이 학생의 위기 영역에 반영되었습니다.');
+  ui.scrChecked = {};
+  ui.scrMemo = '';
+  openStudent(sid);
+  ui.studentTab = 'scr';
+  render();
+}
+function resetScreening() {
+  ui.scrChecked = {};
+  ui.scrMemo = '';
+  ui.scrDate = today();
+  render();
+}
+
+/* ===================== 협의회 ===================== */
+function renderMeetings() {
+  if (ui.editingMeeting) return renderMeetingForm(ui.meetingId ? byId(state.meetings, ui.meetingId) : null);
+  let h = '<div class="btn-row"><button class="btn" onclick="showMeetingForm(null)">+ 협의회 기록 추가</button>' +
+    '<span class="muted">학생맞춤통합지원팀 협의(사례회의) 기록을 남기고 회의록을 출력합니다.</span></div>';
+  const list = state.meetings.slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  if (list.length === 0) return h + '<div class="card muted">기록된 협의회가 없습니다.</div>';
+  h += '<div class="card table-wrap"><table><tr><th>일시</th><th>안건</th><th>대상 학생</th><th>결정 사항</th><th style="width:170px;"></th></tr>';
+  list.forEach(m => {
+    const studs = (m.studentIds || []).map(id => { const s = getStudent(id); return s ? esc('[' + s.code + '] ' + dispName(s)) : ''; }).filter(Boolean).join(', ');
+    h += '<tr><td style="white-space:nowrap;">' + esc(m.date) + (m.time ? ' ' + esc(m.time) : '') + '</td>' +
+      '<td>' + esc(m.agenda || '') + '</td><td>' + studs + '</td>' +
+      '<td>' + esc((m.decisions || '').slice(0, 60)) + ((m.decisions || '').length > 60 ? '…' : '') + '</td>' +
+      '<td style="white-space:nowrap;"><button class="btn ghost sm" onclick="showMeetingForm(\'' + m.id + '\')">수정</button> ' +
+      '<button class="btn sub sm" onclick="printMeeting(\'' + m.id + '\')">회의록</button> ' +
+      '<button class="btn danger sm" onclick="deleteMeeting(\'' + m.id + '\')">삭제</button></td></tr>';
+  });
+  h += '</table></div>';
+  return h;
+}
+function showMeetingForm(id) { ui.editingMeeting = true; ui.meetingId = id; render(); }
+function cancelMeetingForm() { ui.editingMeeting = false; ui.meetingId = null; render(); }
+function renderMeetingForm(m) {
+  const d = m || { date: today(), time: '', place: '', attendees: '', agenda: '', studentIds: [], discussion: '', decisions: '', followup: '' };
+  let h = '<h2>' + (m ? '협의회 기록 수정' : '협의회 기록 추가') + '</h2><div class="card">' +
+    '<div class="grid g3">' +
+    '<div><label class="fld">일자</label><input type="date" id="m-date" value="' + esc(d.date) + '"></div>' +
+    '<div><label class="fld">시간</label><input type="text" id="m-time" value="' + esc(d.time) + '" placeholder="예: 15:30"></div>' +
+    '<div><label class="fld">장소</label><input type="text" id="m-place" value="' + esc(d.place) + '"></div></div>' +
+    '<div style="margin-top:10px;"><label class="fld">참석자 (직위·성명, 쉼표로 구분)</label><input type="text" id="m-attendees" value="' + esc(d.attendees) + '"></div>' +
+    '<div style="margin-top:10px;"><label class="fld">안건</label><input type="text" id="m-agenda" value="' + esc(d.agenda) + '"></div>' +
+    '<h3>대상 학생 (복수 선택)</h3><div class="checks">' +
+    state.students.map(s => '<label><input type="checkbox" name="m-studs" value="' + s.id + '"' + ((d.studentIds || []).indexOf(s.id) >= 0 ? ' checked' : '') + '> ' + esc(studentLabel(s)) + '</label>').join('') +
+    (state.students.length === 0 ? '<span class="muted">등록된 학생이 없습니다.</span>' : '') + '</div>' +
+    '<div style="margin-top:10px;"><label class="fld">논의 내용</label><textarea id="m-discussion">' + esc(d.discussion) + '</textarea></div>' +
+    '<div style="margin-top:10px;"><label class="fld">결정 사항 (누가·무엇을·언제까지)</label><textarea id="m-decisions">' + esc(d.decisions) + '</textarea></div>' +
+    '<div style="margin-top:10px;"><label class="fld">후속 조치·차기 협의</label><textarea id="m-followup">' + esc(d.followup) + '</textarea></div>' +
+    '<div class="btn-row" style="margin-top:12px;"><button class="btn" onclick="saveMeeting()">저장</button>' +
+    '<button class="btn ghost" onclick="cancelMeetingForm()">취소</button></div></div>';
+  return h;
+}
+function saveMeeting() {
+  const isNew = !ui.meetingId;
+  const m = isNew ? { id: uid() } : byId(state.meetings, ui.meetingId);
+  if (!m) return;
+  m.date = val('m-date') || today();
+  m.time = val('m-time');
+  m.place = val('m-place');
+  m.attendees = val('m-attendees');
+  m.agenda = val('m-agenda');
+  m.studentIds = checkedVals('m-studs');
+  m.discussion = val('m-discussion');
+  m.decisions = val('m-decisions');
+  m.followup = val('m-followup');
+  if (isNew) state.meetings.push(m);
+  ui.editingMeeting = false;
+  ui.meetingId = null;
+  save();
+  render();
+}
+function deleteMeeting(id) {
+  if (!confirm('이 협의회 기록을 삭제할까요?')) return;
+  state.meetings = state.meetings.filter(m => m.id !== id);
+  save();
+  render();
+}
+
+/* ===================== 자원 연계 ===================== */
+function resourceRowsHtml() {
+  let list = state.resources.slice();
+  if (ui.resKind) list = list.filter(r => r.kind === ui.resKind);
+  if (ui.resSearch) {
+    const q = ui.resSearch.toLowerCase();
+    list = list.filter(r => (r.name + ' ' + r.category + ' ' + r.note + ' ' + r.contact).toLowerCase().indexOf(q) >= 0);
+  }
+  if (list.length === 0) return '<tr><td colspan="6" class="muted">자원이 없습니다.</td></tr>';
+  return list.map(r => '<tr><td>' + esc(r.kind) + '</td><td><b>' + esc(r.name) + '</b></td><td>' + esc(r.category) + '</td>' +
+    '<td>' + esc(r.contact) + '</td><td>' + esc(r.note) + '</td>' +
+    '<td style="white-space:nowrap;"><button class="btn ghost sm" onclick="showResourceForm(\'' + r.id + '\')">수정</button> ' +
+    '<button class="btn danger sm" onclick="deleteResource(\'' + r.id + '\')">삭제</button></td></tr>').join('');
+}
+function refreshResourceRows() {
+  const el = document.getElementById('res-rows');
+  if (el) el.innerHTML = resourceRowsHtml();
+}
+function renderResources() {
+  if (ui.editingResource) return renderResourceForm(ui.resourceId ? byId(state.resources, ui.resourceId) : null);
+  let h = '<div class="btn-row"><button class="btn" onclick="showResourceForm(null)">+ 자원 추가</button>' +
+    '<button class="btn ghost" onclick="restoreDefaultResources()">기본 목록 다시 채우기</button>' +
+    '<span class="muted">우리 학교·지역 실정에 맞게 연락처와 담당자를 채워 두면 연계가 빨라집니다.</span></div>' +
+    '<div class="info-box">기본 목록의 전화번호(1388, 117, 112, 109, 129, 1366)는 전국 공통 번호이지만, 기관별 지역 연락처와 운영 여부는 <b>사용 전 반드시 확인</b>해 주세요.</div>';
+  h += '<div class="card"><div class="grid g3" style="margin-bottom:10px;">' +
+    '<div><label class="fld">구분</label><select onchange="ui.resKind=this.value; refreshResourceRows()">' +
+    '<option value="">전체</option>' + optionList(['교내', '지역', '긴급'], ui.resKind) + '</select></div>' +
+    '<div style="grid-column: span 2;"><label class="fld">검색</label><input type="text" value="' + esc(ui.resSearch) + '" oninput="ui.resSearch=this.value.trim(); refreshResourceRows()"></div></div>' +
+    '<div class="table-wrap"><table><thead><tr><th>구분</th><th>자원·기관</th><th>지원 영역</th><th>연락처</th><th>비고</th><th></th></tr></thead>' +
+    '<tbody id="res-rows">' + resourceRowsHtml() + '</tbody></table></div></div>';
+  return h;
+}
+function showResourceForm(id) { ui.editingResource = true; ui.resourceId = id; render(); }
+function cancelResourceForm() { ui.editingResource = false; ui.resourceId = null; render(); }
+function renderResourceForm(r) {
+  const d = r || { kind: '지역', name: '', category: '', contact: '', note: '' };
+  return '<h2>' + (r ? '자원 수정' : '자원 추가') + '</h2><div class="card">' +
+    '<div class="grid g2">' +
+    '<div><label class="fld">구분</label><select id="r-kind">' + optionList(['교내', '지역', '긴급'], d.kind) + '</select></div>' +
+    '<div><label class="fld">자원·기관명</label><input type="text" id="r-name" value="' + esc(d.name) + '"></div>' +
+    '<div><label class="fld">지원 영역</label><input type="text" id="r-category" value="' + esc(d.category) + '" placeholder="예: 심리·정서"></div>' +
+    '<div><label class="fld">연락처·담당자</label><input type="text" id="r-contact" value="' + esc(d.contact) + '"></div></div>' +
+    '<div style="margin-top:10px;"><label class="fld">비고 (지원 내용, 신청 방법 등)</label><textarea id="r-note">' + esc(d.note) + '</textarea></div>' +
+    '<div class="btn-row" style="margin-top:12px;"><button class="btn" onclick="saveResource()">저장</button>' +
+    '<button class="btn ghost" onclick="cancelResourceForm()">취소</button></div></div>';
+}
+function saveResource() {
+  const isNew = !ui.resourceId;
+  const r = isNew ? { id: uid() } : byId(state.resources, ui.resourceId);
+  if (!r) return;
+  r.kind = val('r-kind');
+  r.name = val('r-name');
+  if (!r.name) { alert('자원·기관명을 입력해 주세요.'); return; }
+  r.category = val('r-category');
+  r.contact = val('r-contact');
+  r.note = val('r-note');
+  if (isNew) state.resources.push(r);
+  ui.editingResource = false;
+  ui.resourceId = null;
+  save();
+  render();
+}
+function deleteResource(id) {
+  if (!confirm('이 자원을 삭제할까요?')) return;
+  state.resources = state.resources.filter(r => r.id !== id);
+  save();
+  render();
+}
+function restoreDefaultResources() {
+  if (!confirm('기본 자원 목록 중 현재 목록에 없는 항목을 다시 추가할까요? (기존 항목은 유지)')) return;
+  DEFAULT_RESOURCES.forEach(def => {
+    if (!state.resources.some(r => r.name === def.name)) {
+      state.resources.push(Object.assign({ id: uid() }, def));
+    }
+  });
+  save();
+  render();
+}
+
+/* ===================== 통계·보고 ===================== */
+function renderStats() {
+  const from = ui.statFrom || schoolYearStart();
+  const to = ui.statTo || today();
+  return '<h2>운영 실적 통계</h2>' +
+    '<div class="card"><div class="grid g3">' +
+    '<div><label class="fld">시작일</label><input type="date" id="st-from" value="' + esc(from) + '"></div>' +
+    '<div><label class="fld">종료일</label><input type="date" id="st-to" value="' + esc(to) + '"></div>' +
+    '<div style="display:flex; align-items:flex-end;"><button class="btn" onclick="runStats()">집계 실행</button></div></div>' +
+    '<div class="muted" style="margin-top:6px;">기본 기간은 이번 학년도(3월 1일)부터 오늘까지입니다. 보고서에는 학생 이름 등 개인정보가 들어가지 않습니다.</div></div>' +
+    '<div id="stats-result"></div>';
+}
+function computeStats(from, to) {
+  const inRange = d => d && d >= from && d <= to;
+  const managed = state.students.filter(s => s.openedAt <= to && (!s.closedAt || s.closedAt >= from));
+  const opened = state.students.filter(s => inRange(s.openedAt));
+  const closed = state.students.filter(s => inRange(s.closedAt));
+  const activeAtEnd = state.students.filter(s => s.openedAt <= to && (!s.closedAt || s.closedAt > to));
+  const areaCount = {};
+  AREAS.forEach(a => areaCount[a] = 0);
+  managed.forEach(s => (s.areas || []).forEach(a => { if (areaCount[a] != null) areaCount[a]++; else areaCount[a] = 1; }));
+  const logType = {};
+  LOG_TYPES.forEach(t => logType[t] = 0);
+  let logTotal = 0;
+  const servedIds = {};
+  state.students.forEach(s => (s.logs || []).forEach(l => {
+    if (inRange(l.date)) {
+      logTotal++;
+      servedIds[s.id] = true;
+      if (logType[l.type] != null) logType[l.type]++; else logType[l.type] = (logType[l.type] || 0) + 1;
+    }
+  }));
+  let scrCount = 0;
+  state.students.forEach(s => (s.screenings || []).forEach(sc => { if (inRange(sc.date)) scrCount++; }));
+  const meetCount = state.meetings.filter(m => inRange(m.date)).length;
+  const levelCount = {};
+  LEVELS.forEach(lv => levelCount[lv] = activeAtEnd.filter(s => s.level === lv).length);
+  return { from, to, managed, opened, closed, activeAtEnd, areaCount, logType, logTotal, served: Object.keys(servedIds).length, scrCount, meetCount, levelCount };
+}
+function runStats() {
+  const from = val('st-from') || schoolYearStart();
+  const to = val('st-to') || today();
+  ui.statFrom = from;
+  ui.statTo = to;
+  if (from > to) { alert('시작일이 종료일보다 늦습니다.'); return; }
+  const st = computeStats(from, to);
+  const school = state.settings.schoolName || '(학교명 미설정)';
+
+  let md = '# 학생맞춤통합지원 운영 실적\n\n';
+  md += '- 학교: ' + school + '\n- 집계 기간: ' + from + ' ~ ' + to + '\n- 작성일: ' + today() + (state.settings.teacherName ? '\n- 작성자: ' + state.settings.teacherName : '') + '\n\n';
+  md += '## 1. 사례 현황\n\n| 구분 | 인원 |\n|---|---|\n';
+  md += '| 기간 내 신규 발굴·등록 | ' + st.opened.length + ' |\n';
+  md += '| 기간 내 종결 | ' + st.closed.length + ' |\n';
+  md += '| 기간 말 기준 진행 중 | ' + st.activeAtEnd.length + ' |\n';
+  md += '| 기간 중 관리 사례(연인원 아님) | ' + st.managed.length + ' |\n\n';
+  md += '### 진행 중 사례의 위기 수준\n\n| 수준 | 인원 |\n|---|---|\n' + LEVELS.map(lv => '| ' + lv + ' | ' + st.levelCount[lv] + ' |').join('\n') + '\n\n';
+  md += '## 2. 위기 영역별 현황 (관리 사례 기준, 중복 집계)\n\n| 영역 | 사례 수 |\n|---|---|\n';
+  Object.keys(st.areaCount).forEach(a => { if (st.areaCount[a] > 0) md += '| ' + a + ' | ' + st.areaCount[a] + ' |\n'; });
+  md += '\n## 3. 지원 활동 실적\n\n| 유형 | 건수 |\n|---|---|\n';
+  Object.keys(st.logType).forEach(t => { if (st.logType[t] > 0) md += '| ' + t + ' | ' + st.logType[t] + ' |\n'; });
+  md += '| **합계** | **' + st.logTotal + '** |\n\n';
+  md += '- 지원받은 학생 수(실인원): ' + st.served + '명\n';
+  md += '- 위기 징후 체크리스트 실시: ' + st.scrCount + '건\n';
+  md += '- 지원팀 협의회 개최: ' + st.meetCount + '회\n\n';
+  md += '※ 학생맞춤통합지원 업무 도우미에서 자동 집계한 자료입니다. 공식 보고 전 원자료와 대조해 주세요.\n';
+  lastStatsMd = md;
+
+  const tsvRows = [['구분', '항목', '값']];
+  tsvRows.push(['사례 현황', '기간 내 신규 등록', st.opened.length]);
+  tsvRows.push(['사례 현황', '기간 내 종결', st.closed.length]);
+  tsvRows.push(['사례 현황', '기간 말 진행 중', st.activeAtEnd.length]);
+  tsvRows.push(['사례 현황', '기간 중 관리 사례', st.managed.length]);
+  LEVELS.forEach(lv => tsvRows.push(['위기 수준(진행 중)', lv, st.levelCount[lv]]));
+  Object.keys(st.areaCount).forEach(a => { if (st.areaCount[a] > 0) tsvRows.push(['위기 영역', a, st.areaCount[a]]); });
+  Object.keys(st.logType).forEach(t => { if (st.logType[t] > 0) tsvRows.push(['지원 활동', t, st.logType[t]]); });
+  tsvRows.push(['지원 활동', '합계', st.logTotal]);
+  tsvRows.push(['지원 활동', '지원 학생 수(실인원)', st.served]);
+  tsvRows.push(['기타', '체크리스트 실시', st.scrCount]);
+  tsvRows.push(['기타', '협의회 개최', st.meetCount]);
+  lastStatsTsv = toTsv(tsvRows);
+
+  const el = document.getElementById('stats-result');
+  el.innerHTML = '<div class="cards" style="margin-bottom:12px;">' +
+    '<div class="stat-card"><div class="num">' + st.opened.length + '</div><div class="lbl">신규 발굴</div></div>' +
+    '<div class="stat-card green"><div class="num">' + st.closed.length + '</div><div class="lbl">종결</div></div>' +
+    '<div class="stat-card"><div class="num">' + st.activeAtEnd.length + '</div><div class="lbl">진행 중</div></div>' +
+    '<div class="stat-card amber"><div class="num">' + st.logTotal + '</div><div class="lbl">지원 활동(건)</div></div>' +
+    '<div class="stat-card"><div class="num">' + st.meetCount + '</div><div class="lbl">협의회(회)</div></div>' +
+    '</div>' +
+    '<div class="btn-row">' +
+    '<button class="btn" onclick="copyStatsMd()">보고서 복사 (마크다운)</button>' +
+    '<button class="btn sub" onclick="downloadStatsMd()">보고서 파일 저장 (.md)</button>' +
+    '<button class="btn sub" onclick="downloadStatsTsv()">집계표 저장 (.tsv — 엑셀용)</button></div>' +
+    '<div class="mono-block">' + esc(md) + '</div>';
+}
+function copyStatsMd() { if (lastStatsMd) copyText(lastStatsMd); }
+function downloadStatsMd() { if (lastStatsMd) download('학생맞춤통합지원_실적_' + today() + '.md', lastStatsMd, 'text/markdown;charset=utf-8'); }
+function downloadStatsTsv() { if (lastStatsTsv) download('학생맞춤통합지원_집계_' + today() + '.tsv', lastStatsTsv, 'text/tab-separated-values;charset=utf-8'); }
+
+/* ===================== 데이터·설정 ===================== */
+function renderData() {
+  const s = state.settings;
+  return '<h2>설정</h2><div class="card"><div class="grid g3">' +
+    '<div><label class="fld">학교명</label><input type="text" id="set-school" value="' + esc(s.schoolName) + '"></div>' +
+    '<div><label class="fld">담당자명 (기록자 기본값)</label><input type="text" id="set-teacher" value="' + esc(s.teacherName) + '"></div>' +
+    '<div style="display:flex; align-items:flex-end;"><button class="btn" onclick="saveSettings()">설정 저장</button></div></div></div>' +
+
+    '<h2>백업·복원</h2><div class="card">' +
+    '<div class="info-box">브라우저 데이터가 삭제되면 기록이 사라집니다. <b>주 1회 이상 백업</b>을 권장하며, 백업 파일에는 학생 개인정보가 들어 있으므로 암호화된 드라이브나 잠금 폴더 등 안전한 곳에 보관하세요.</div>' +
+    '<div class="btn-row">' +
+    '<button class="btn" onclick="downloadBackup()">전체 백업 파일 저장 (.json)</button>' +
+    '<label class="btn sub" style="display:inline-block;">백업 파일에서 복원<input type="file" accept=".json,application/json" style="display:none;" onchange="importBackup(this)"></label>' +
+    '</div></div>' +
+
+    '<h2>내보내기 (엑셀 호환 TSV)</h2><div class="card"><div class="btn-row">' +
+    '<button class="btn sub" onclick="exportStudentsTsv()">학생 사례 목록 내보내기</button>' +
+    '<button class="btn sub" onclick="exportLogsTsv()">지원 기록 내보내기</button></div>' +
+    '<div class="muted">내보낸 파일은 엑셀에서 열 수 있으며, scripts/make_report.py 로 별도 통계 보고서를 만들 수도 있습니다.</div></div>' +
+
+    '<h2>기타</h2><div class="card"><div class="btn-row">' +
+    '<button class="btn ghost" onclick="loadSampleData()">가상 예시 데이터 불러오기</button>' +
+    '<button class="btn danger" onclick="wipeAll()">모든 데이터 삭제</button></div>' +
+    '<div class="muted">예시 데이터는 실존 인물과 무관한 가상 데이터입니다. 학년도가 끝나 데이터를 폐기할 때는 백업 파일 삭제까지 확인하세요.</div></div>';
+}
+function saveSettings() {
+  state.settings.schoolName = val('set-school');
+  state.settings.teacherName = val('set-teacher');
+  save();
+  render();
+  alert('저장되었습니다.');
+}
+function downloadBackup() {
+  download('학생맞춤통합지원_백업_' + today() + '.json', JSON.stringify(state, null, 2), 'application/json;charset=utf-8');
+}
+function importBackup(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const d = JSON.parse(reader.result);
+      if (!d || !Array.isArray(d.students)) throw new Error('형식이 올바르지 않습니다.');
+      if (!confirm('현재 데이터를 백업 파일 내용으로 교체합니다. (학생 ' + d.students.length + '명)\n계속할까요?')) { input.value = ''; return; }
+      localStorage.setItem(STORE_KEY, JSON.stringify(d));
+      state = load();
+      save();
+      render();
+      alert('복원되었습니다.');
+    } catch (e) { alert('복원 실패: ' + e.message); }
+    input.value = '';
+  };
+  reader.readAsText(f, 'utf-8');
+}
+function exportStudentsTsv() {
+  const rows = [['관리번호', '이름', '학년', '반', '번호', '담임', '담당자', '발굴경로', '위기영역', '위기수준', '단계', '등록일', '종결일', '동의확보', '동의일', '상황요약']];
+  state.students.forEach(s => rows.push([
+    s.code, s.name, s.grade, s.klass, s.num, s.homeroom, s.manager, s.referralPath,
+    (s.areas || []).join(', '), s.level, s.stage, s.openedAt, s.closedAt || '',
+    (s.consent && s.consent.collected) ? 'Y' : 'N', (s.consent && s.consent.date) || '', s.summary,
+  ]));
+  download('학생사례_' + today() + '.tsv', toTsv(rows), 'text/tab-separated-values;charset=utf-8');
+}
+function exportLogsTsv() {
+  const rows = [['관리번호', '이름', '날짜', '유형', '내용', '다음조치예정일', '다음조치', '기록자']];
+  state.students.forEach(s => (s.logs || []).forEach(l => rows.push([
+    s.code, s.name, l.date, l.type, l.content, l.nextDate || '', l.nextAction || '', l.writer || '',
+  ])));
+  download('지원기록_' + today() + '.tsv', toTsv(rows), 'text/tab-separated-values;charset=utf-8');
+}
+function wipeAll() {
+  if (!confirm('모든 학생 사례·기록·협의회·자원 데이터를 삭제합니다. 되돌릴 수 없습니다.\n삭제 전 백업을 받아 두셨나요?')) return;
+  if (!confirm('정말 삭제할까요?')) return;
+  localStorage.removeItem(STORE_KEY);
+  state = defaultState();
+  save();
+  ui = Object.assign(ui, { view: 'dashboard', studentId: null, editingStudent: false });
+  render();
+}
+function loadSampleData() {
+  if (state.students.length > 0 && !confirm('예시 데이터를 불러오면 현재 데이터가 교체됩니다. 계속할까요?')) return;
+  const t = today();
+  const d30 = addDays(t, -30), d20 = addDays(t, -20), d10 = addDays(t, -10), d5 = addDays(t, -5), p7 = addDays(t, 7);
+  const st = defaultState();
+  st.settings.schoolName = '예시공업고등학교 (가상)';
+  st.settings.teacherName = '담당교사(예시)';
+  st.seq = 4;
+  const y = new Date().getFullYear();
+  st.students = [
+    {
+      id: uid(), code: y + '-001', name: '김가상', grade: '1', klass: '2', num: '7', homeroom: '이담임(가상)', manager: '담당교사(예시)',
+      referralPath: '담임교사 관찰', areas: ['출결·학업중단', '심리·정서'], level: '지원필요', stage: '지원실행',
+      openedAt: d30, closedAt: '', consent: { collected: true, date: d20, note: '보호자 서면 동의' },
+      summary: '2학기 들어 무단지각이 잦아지고 수업 중 엎드려 있는 모습이 늘어남. 상담 결과 수면 문제와 무기력감 호소. ※ 가상 예시 데이터',
+      plan: { goals: '주 3회 이상 정시 등교, 무기력감 완화', inSchool: '주 1회 상담(전문상담교사), 담임 아침 맞이', external: 'Wee센터 심층상담 의뢰 검토', period: '2개월', reviewDate: p7 },
+      logs: [
+        { id: uid(), date: d20, type: '학생상담', content: '최근 수면 리듬과 학교생활 어려움 파악. 다음 주 재상담 약속. ※ 가상 예시', nextDate: d10, nextAction: '2차 상담', writer: '담당교사(예시)' },
+        { id: uid(), date: d10, type: '학생상담', content: '2차 상담 진행. 등교 시간 목표를 함께 정함.', nextDate: p7, nextAction: '중간 점검 상담', writer: '담당교사(예시)' },
+      ],
+      screenings: [{ id: uid(), date: d30, checkedIds: ['AT1', 'AT4', 'EM1', 'EM5'], memo: '담임 관찰 기반 실시 (가상 예시)' }],
+    },
+    {
+      id: uid(), code: y + '-002', name: '이연습', grade: '2', klass: '1', num: '15', homeroom: '박담임(가상)', manager: '담당교사(예시)',
+      referralPath: '체크리스트(스크리닝)', areas: ['경제', '가정·환경'], level: '관심', stage: '계획수립',
+      openedAt: d20, closedAt: '', consent: { collected: false, date: '', note: '' },
+      summary: '실습복·교재 준비가 어려운 상황이 관찰됨. 보호자 장기 야간근무로 돌봄 공백 추정. ※ 가상 예시 데이터',
+      plan: { goals: '', inSchool: '', external: '', period: '', reviewDate: '' },
+      logs: [{ id: uid(), date: d10, type: '교사협의', content: '담임·교육복지 담당과 초기 정보 공유. 교육급여 수급 여부 확인 예정.', nextDate: p7, nextAction: '보호자 상담 일정 잡기', writer: '담당교사(예시)' }],
+      screenings: [{ id: uid(), date: d20, checkedIds: ['EC1', 'EC4', 'FA1'], memo: '가상 예시' }],
+    },
+    {
+      id: uid(), code: y + '-003', name: '박모의', grade: '3', klass: '4', num: '21', homeroom: '최담임(가상)', manager: '담당교사(예시)',
+      referralPath: '학생 본인 요청', areas: ['학업·진로'], level: '관심', stage: '종결',
+      openedAt: d30, closedAt: d5, consent: { collected: true, date: d30, note: '학생·보호자 동의' },
+      summary: '취업처 결정 관련 불안 호소. 진로상담 3회 후 안정. ※ 가상 예시 데이터',
+      plan: { goals: '진로 결정 불안 완화', inSchool: '진로전담교사 상담 연계', external: '', period: '1개월', reviewDate: '' },
+      logs: [
+        { id: uid(), date: d20, type: '교내지원(프로그램·물품 등)', content: '진로전담교사 상담 연계 (1회차).', nextDate: '', nextAction: '', writer: '담당교사(예시)' },
+        { id: uid(), date: d5, type: '모니터링', content: '취업처 결정, 불안 해소되어 종결. 필요시 재개 안내.', nextDate: '', nextAction: '', writer: '담당교사(예시)' },
+      ],
+      screenings: [],
+    },
+  ];
+  st.meetings = [{
+    id: uid(), date: d10, time: '15:30', place: '상담실', attendees: '교감, 담당부장, 전문상담교사, 담임(가상)',
+    agenda: '9월 신규 사례 검토 및 지원 계획 수립', studentIds: [st.students[0].id, st.students[1].id],
+    discussion: '사례별 상황 공유, 교내 지원 역할 분담 논의. ※ 가상 예시', decisions: '1번 사례: 주 1회 상담 지속. 2번 사례: 보호자 상담 후 교육급여 안내.', followup: '차기 협의회 2주 후',
+  }];
+  localStorage.setItem(STORE_KEY, JSON.stringify(st));
+  state = load();
+  save();
+  ui.view = 'dashboard';
+  render();
+  alert('가상 예시 데이터를 불러왔습니다. 실제 사용 전 「데이터·설정」에서 모든 데이터 삭제 후 시작하세요.');
+}
+
+/* ===================== 인쇄 문서 ===================== */
+function docHeaderTable(s) {
+  const cls = [s.grade && s.grade + '학년', s.klass && s.klass + '반', s.num && s.num + '번'].filter(Boolean).join(' ');
+  return '<table>' +
+    '<tr><th style="width:110px;">관리번호</th><td>' + esc(s.code) + '</td><th style="width:110px;">이름</th><td>' + esc(dispName(s)) + '</td></tr>' +
+    '<tr><th>학년·반</th><td>' + esc(cls || '-') + '</td><th>담임</th><td>' + esc(s.homeroom || '-') + '</td></tr>' +
+    '<tr><th>담당자</th><td>' + esc(s.manager || '-') + '</td><th>등록일</th><td>' + esc(s.openedAt) + '</td></tr>' +
+    '<tr><th>위기 수준</th><td>' + esc(s.level) + '</td><th>위기 영역</th><td>' + esc((s.areas || []).join(', ') || '-') + '</td></tr>' +
+    '</table>';
+}
+function docFoot() {
+  return '<div class="doc-foot">본 문서에는 학생 개인정보가 포함되어 있습니다. 「개인정보 보호법」 및 학교 내규에 따라 열람 범위를 제한하고 안전하게 보관·파기하십시오.' +
+    (state.settings.schoolName ? ' — ' + esc(state.settings.schoolName) : '') + '</div>';
+}
+function signTable() {
+  return '<table class="sign-table" style="width:60%; margin-left:auto; margin-top:14px;"><tr><th>담당</th><th>부장</th><th>교감</th><th>교장</th></tr>' +
+    '<tr><td></td><td></td><td></td><td></td></tr></table>';
+}
+function printDoc(html) {
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+}
+function printPlan(id) {
+  const s = getStudent(id);
+  if (!s) return;
+  const p = s.plan || {};
+  printDoc('<h1>학생맞춤통합지원 계획서</h1>' + signTable() + docHeaderTable(s) +
+    '<h3>1. 상황 요약</h3><table><tr><td style="min-height:60px; white-space:pre-wrap;">' + esc(s.summary || '') + '</td></tr></table>' +
+    '<h3>2. 지원 목표</h3><table><tr><td style="white-space:pre-wrap;">' + esc(p.goals || '') + '</td></tr></table>' +
+    '<h3>3. 지원 내용</h3><table><tr><th style="width:110px;">교내 지원</th><td style="white-space:pre-wrap;">' + esc(p.inSchool || '') + '</td></tr>' +
+    '<tr><th>외부 연계</th><td style="white-space:pre-wrap;">' + esc(p.external || '') + '</td></tr>' +
+    '<tr><th>지원 기간</th><td>' + esc(p.period || '') + '</td></tr>' +
+    '<tr><th>중간 점검</th><td>' + esc(p.reviewDate || '') + '</td></tr></table>' +
+    '<p style="margin-top:16px;">작성일: ' + today() + '　작성자: ' + esc(s.manager || state.settings.teacherName || '') + '</p>' +
+    docFoot());
+}
+function printCaseSummary(id) {
+  const s = getStudent(id);
+  if (!s) return;
+  const logs = (s.logs || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  let logRows = logs.map(l => '<tr><td style="white-space:nowrap;">' + esc(l.date) + '</td><td>' + esc(l.type) + '</td><td style="white-space:pre-wrap;">' + esc(l.content) + '</td><td>' + esc(l.writer || '') + '</td></tr>').join('');
+  if (!logRows) logRows = '<tr><td colspan="4">기록 없음</td></tr>';
+  printDoc('<h1>학생맞춤통합지원 사례 요약</h1>' + docHeaderTable(s) +
+    '<h3>상황 요약</h3><table><tr><td style="white-space:pre-wrap;">' + esc(s.summary || '') + '</td></tr></table>' +
+    '<h3>지원 경과 (' + logs.length + '건)</h3><table><tr><th style="width:90px;">일자</th><th style="width:150px;">유형</th><th>내용</th><th style="width:80px;">기록자</th></tr>' + logRows + '</table>' +
+    '<h3>현재 상태</h3><table><tr><th style="width:110px;">단계</th><td>' + esc(s.stage) + '</td><th style="width:110px;">종결일</th><td>' + esc(s.closedAt || '-') + '</td></tr></table>' +
+    '<p style="margin-top:16px;">출력일: ' + today() + '</p>' + docFoot());
+}
+function printMeeting(id) {
+  const m = byId(state.meetings, id);
+  if (!m) return;
+  const studs = (m.studentIds || []).map(sid => { const s = getStudent(sid); return s ? '[' + s.code + '] ' + dispName(s) : ''; }).filter(Boolean).join(', ');
+  printDoc('<h1>학생맞춤통합지원팀 협의회 회의록</h1>' + signTable() +
+    '<table><tr><th style="width:110px;">일시</th><td>' + esc(m.date + (m.time ? ' ' + m.time : '')) + '</td><th style="width:110px;">장소</th><td>' + esc(m.place || '') + '</td></tr>' +
+    '<tr><th>참석자</th><td colspan="3">' + esc(m.attendees || '') + '</td></tr>' +
+    '<tr><th>안건</th><td colspan="3">' + esc(m.agenda || '') + '</td></tr>' +
+    '<tr><th>대상 학생</th><td colspan="3">' + esc(studs || '-') + '</td></tr></table>' +
+    '<h3>논의 내용</h3><table><tr><td style="white-space:pre-wrap; min-height:80px;">' + esc(m.discussion || '') + '</td></tr></table>' +
+    '<h3>결정 사항</h3><table><tr><td style="white-space:pre-wrap;">' + esc(m.decisions || '') + '</td></tr></table>' +
+    '<h3>후속 조치</h3><table><tr><td style="white-space:pre-wrap;">' + esc(m.followup || '') + '</td></tr></table>' +
+    docFoot());
+}
+function screeningDocHtml(title, dateStr, checkedIds, memo, studentHtml) {
+  const areas = screeningAreas(checkedIds);
+  let rows = '';
+  CHECKLIST.forEach(g => {
+    g.items.forEach(it => {
+      if (checkedIds.indexOf(it.id) >= 0) {
+        rows += '<tr><td>' + esc(g.area) + '</td><td>' + esc(it.text) + (it.alert ? ' <b>(즉시 대응)</b>' : '') + '</td></tr>';
+      }
+    });
+  });
+  if (!rows) rows = '<tr><td colspan="2">체크된 문항 없음</td></tr>';
+  return '<h1>' + esc(title) + '</h1>' + (studentHtml || '') +
+    '<table><tr><th style="width:110px;">실시일</th><td>' + esc(dateStr) + '</td><th style="width:110px;">체크 문항</th><td>' + checkedIds.length + '개</td></tr>' +
+    '<tr><th>해당 영역</th><td colspan="3">' + esc(Object.keys(areas).map(a => a + '(' + areas[a] + ')').join(', ') || '-') + '</td></tr></table>' +
+    '<h3>체크 문항</h3><table><tr><th style="width:150px;">영역</th><th>문항</th></tr>' + rows + '</table>' +
+    (memo ? '<h3>메모</h3><table><tr><td style="white-space:pre-wrap;">' + esc(memo) + '</td></tr></table>' : '') +
+    '<p style="margin-top:16px;">출력일: ' + today() + '</p>' + docFoot();
+}
+function printScreeningCurrent() {
+  const s = ui.scrStudent ? getStudent(ui.scrStudent) : null;
+  printDoc(screeningDocHtml('위기 징후 체크리스트 결과', ui.scrDate || today(), Object.keys(ui.scrChecked), ui.scrMemo, s ? docHeaderTable(s) : ''));
+}
+function printScreeningRow(studentId, scrId) {
+  const s = getStudent(studentId);
+  if (!s) return;
+  const sc = (s.screenings || []).find(x => x.id === scrId);
+  if (!sc) return;
+  printDoc(screeningDocHtml('위기 징후 체크리스트 결과', sc.date, sc.checkedIds, sc.memo, docHeaderTable(s)));
+}
+
+/* ===================== 시작 ===================== */
+applyBanner();
+render();
+document.getElementById('saved-at').textContent = '변경 시 자동 저장';
+</script>
+</body>
+</html>
