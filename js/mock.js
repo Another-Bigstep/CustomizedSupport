@@ -88,13 +88,13 @@ var SOSMock = (function () {
     return {
       students: students, teachers: teachers, records: records,
       tags: L.DEFAULT_TAGS.slice(), phrases: L.DEFAULT_PHRASES.slice(), settings: Object.assign({}, L.DEFAULT_SETTINGS, { schoolName: '(데모) 천안공업고등학교' }),
-      views: [], logs: []
+      views: [], logs: [], meetings: []
     };
   }
 
   function loadDb() {
     if (db) return db;
-    try { var raw = localStorage.getItem(KEY); if (raw) { db = JSON.parse(raw); if (db && db.students) return db; } } catch (e) { /* 무시 */ }
+    try { var raw = localStorage.getItem(KEY); if (raw) { db = JSON.parse(raw); if (db && db.students) { db.meetings = db.meetings || []; return db; } } } catch (e) { /* 무시 */ }
     db = seed();
     save();
     return db;
@@ -272,6 +272,36 @@ var SOSMock = (function () {
         var v = db.views.slice().reverse();
         if (!L.isAdmin(me)) { var mine = {}; db.records.forEach(function (r) { if (r.author === me.email) mine[r.id] = true; }); v = v.filter(function (x) { return x.email === me.email || mine[x.recordId]; }); }
         return ok({ views: v.slice(0, Number(data.limit) || 100) });
+      }
+      case 'meetings.list': return ok({ meetings: db.meetings.filter(function (m) { return !m.deleted; }).map(function (m) { return L.maskMeeting(m, L.canViewMeeting(me, m, sm)); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }) });
+      case 'meetings.get': {
+        var mg = db.meetings.filter(function (m) { return m.id === data.id && !m.deleted; })[0];
+        if (!mg) return fail('NOT_FOUND', '회의를 찾을 수 없습니다.');
+        var cv = L.canViewMeeting(me, mg, sm);
+        if (cv && mg.createdBy !== me.email && !seenViews[me.email + mg.id]) { seenViews[me.email + mg.id] = true; logView(me, 'meeting', mg.id, '', '열람'); }
+        return ok({ meeting: L.maskMeeting(mg, cv), canEdit: L.canEditMeeting(me, mg) });
+      }
+      case 'meetings.save': {
+        var inp = L.normalizeMeeting(data.meeting || {});
+        var me1 = L.validateMeeting(inp);
+        if (me1) return fail('BAD_REQUEST', me1);
+        var curM = db.meetings.filter(function (m) { return m.id === inp.id; })[0];
+        if (!curM) {
+          Object.assign(inp, { createdBy: me.email, createdByName: me.name, createdAt: now(), updatedAt: now(), version: 1, deleted: false });
+          db.meetings.push(inp); return ok({ meeting: inp });
+        }
+        if (curM.deleted) return fail('NOT_FOUND', '삭제된 회의입니다.');
+        if (!L.canEditMeeting(me, curM)) return fail('FORBIDDEN', '작성자·전담·관리자만 수정할 수 있습니다.');
+        if (Number(data.meeting.version) !== curM.version) return fail('CONFLICT', '다른 사용자가 먼저 수정했습니다. 최신 내용을 확인한 뒤 다시 저장하세요.', { meeting: curM });
+        ['date', 'title', 'attendees', 'status', 'studentIds', 'notes', 'decisions'].forEach(function (k) { curM[k] = inp[k]; });
+        curM.version += 1; curM.updatedAt = now();
+        return ok({ meeting: curM });
+      }
+      case 'meetings.delete': {
+        var dm = db.meetings.filter(function (m) { return m.id === data.id; })[0];
+        if (!dm) return fail('NOT_FOUND', '회의를 찾을 수 없습니다.');
+        if (!L.canEditMeeting(me, dm)) return fail('FORBIDDEN', '작성자·전담·관리자만 삭제할 수 있습니다.');
+        dm.deleted = true; dm.version += 1; return ok({ id: dm.id });
       }
       case 'export.log': db.logs.push({ at: now(), email: me.email, action: 'export', target: data.scope }); return ok({ ok: true });
       default: return fail('UNKNOWN_ACTION', '알 수 없는 요청입니다: ' + action);

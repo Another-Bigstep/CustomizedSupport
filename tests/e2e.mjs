@@ -151,6 +151,42 @@ async function newPage(viewport) {
   await page.goto(BASE + '#/stats');
   await page.waitForSelector('.bars');
   await page.screenshot({ path: `${OUT}/pc3-stats.png`, fullPage: true });
+  // 통합지원 회의: 담임이 회의 생성 → 안건 학생 추가 → 결정 사항 → 저장
+  await page.goto(BASE + '#/meeting');
+  await page.waitForSelector('main .h1');
+  await page.getByRole('button', { name: /새 회의/ }).click();
+  await page.waitForSelector('input[placeholder^="회의 제목"]');
+  await page.locator('input[placeholder^="회의 제목"]').fill('9월 통합지원 회의');
+  await page.locator('input[placeholder^="참석자"]').fill('담임, 상담교사');
+  await page.getByRole('button', { name: /안건 학생 추가/ }).click();
+  await page.waitForSelector('.modal .row');
+  const agendaName = (await page.locator('.modal .row .title').first().textContent()).trim();
+  await page.locator('.modal .row').first().click();
+  await page.waitForFunction(() => document.querySelector('.modal') === null);
+  await page.locator('textarea[placeholder^="논의 내용"]').fill('복지실 연계와 보호자 상담을 진행하기로 함.');
+  await page.getByRole('button', { name: /결정 사항 추가/ }).click();
+  await page.locator('input[placeholder="결정 사항"]').first().fill('복지실 연계 신청');
+  await page.locator('input[placeholder="담당자"]').first().fill('담임');
+  await page.getByRole('button', { name: '회의 만들기' }).click();
+  await page.waitForFunction(() => /9월 통합지원 회의/.test(document.querySelector('main .h1')?.textContent || '') && Array.from(document.querySelectorAll('button.cta')).some(b => b.textContent === '저장'));
+  await page.screenshot({ path: `${OUT}/pc4-meeting.png`, fullPage: true, animations: 'disabled' });
+  await page.goto(BASE + '#/meeting');
+  await page.waitForSelector('main .glass.card');
+  const meetingsText = await page.locator('main').textContent();
+  check(/9월 통합지원 회의/.test(meetingsText) && /미완료 결정 사항 1건/.test(meetingsText) && new RegExp(agendaName).test(meetingsText), '회의 목록에 새 회의와 미완료 결정 사항 표시');
+  // 교과교사(박지훈)는 제목만 보이고 내용은 잠김 (안건 학생이 기계과 3-2 라도 담임이 아님)
+  await page.evaluate(() => { localStorage.removeItem('sos.token'); });
+  await page.goto(BASE + '#/home');
+  await page.waitForSelector('.login-card');
+  await page.getByRole('button', { name: /박지훈/ }).click();
+  await page.waitForSelector('.stats');
+  await page.goto(BASE + '#/meeting');
+  await page.waitForSelector('main .glass.card');
+  check((await page.locator('main .lockbadge').count()) >= 1 && /미완료 결정 사항 0건/.test(await page.locator('main').textContent()), '교과교사에게 회의 내용은 열람 제한');
+  await page.locator('main .glass.card', { hasText: '9월 통합지원 회의' }).first().click();
+  await page.waitForSelector('.rec-lock');
+  check(true, '열람 제한된 회의 상세 안내');
+
   // 관리자 화면
   await page.evaluate(() => { localStorage.removeItem('sos.token'); });
   await page.goto(BASE + '#/home');

@@ -370,6 +370,102 @@ var SOSLib = (function () {
     return tags.map(function (t) { return { tag: t, count: m[t.id] || 0 }; });
   }
 
+  // ---------- 통합지원 회의 ----------
+  var MEETING_STATUS = { planned: '예정', done: '완료' };
+
+  function normalizeMeeting(m) {
+    m = m || {};
+    var decisions = m.decisions;
+    if (typeof decisions === 'string') { try { decisions = JSON.parse(decisions || '[]'); } catch (e) { decisions = []; } }
+    return {
+      id: m.id || '',
+      date: m.date || '',
+      title: m.title || '',
+      attendees: m.attendees || '',
+      status: m.status === 'done' ? 'done' : 'planned',
+      studentIds: splitList(m.studentIds),
+      notes: m.notes || '',
+      decisions: (decisions || []).map(function (d) {
+        return { text: d.text || '', owner: d.owner || '', due: d.due || '', done: d.done === true || d.done === 'Y' };
+      }).filter(function (d) { return d.text; }),
+      createdBy: String(m.createdBy || '').toLowerCase(),
+      createdByName: m.createdByName || '',
+      createdAt: m.createdAt || '',
+      updatedAt: m.updatedAt || '',
+      version: Number(m.version) || 1,
+      deleted: m.deleted === true || m.deleted === 'Y'
+    };
+  }
+
+  function validateMeeting(m) {
+    if (!m.id) return '회의 ID가 없습니다.';
+    if (!parseDate(m.date)) return '회의 날짜를 입력하세요.';
+    if (!m.title || !String(m.title).trim()) return '회의 제목을 입력하세요.';
+    if (String(m.notes || '').length > 20000) return '회의록은 20000자 이내로 입력하세요.';
+    return null;
+  }
+
+  // 회의 내용 열람: 작성자, 전담(상담·복지·보건), 행정담당자, 안건 학생의 담임
+  function canViewMeeting(teacher, meeting, studentsById) {
+    if (!teacher || !meeting) return false;
+    if (meeting.createdBy === teacher.email) return true;
+    if (hasRole(teacher, 'specialist') || isAdmin(teacher)) return true;
+    if (teacher.homeroom) {
+      for (var i = 0; i < meeting.studentIds.length; i++) {
+        var s = studentsById[meeting.studentIds[i]];
+        if (s && classKey(s) === teacher.homeroom) return true;
+      }
+    }
+    return false;
+  }
+
+  function canEditMeeting(teacher, meeting) {
+    return !!teacher && !!meeting && (meeting.createdBy === teacher.email || hasRole(teacher, 'specialist') || isAdmin(teacher));
+  }
+
+  function maskMeeting(meeting, canView) {
+    var m = Object.assign({}, meeting);
+    m.locked = !canView;
+    if (!canView) { m.notes = ''; m.decisions = []; m.attendees = ''; }
+    return m;
+  }
+
+  function openDecisions(meetings) {
+    var out = [];
+    meetings.forEach(function (m) {
+      if (m.deleted || m.locked) return;
+      m.decisions.forEach(function (d, i) { if (!d.done) out.push({ meetingId: m.id, meetingTitle: m.title, date: m.date, index: i, text: d.text, owner: d.owner, due: d.due }); });
+    });
+    return out.sort(function (a, b) { return (a.due || '9999') < (b.due || '9999') ? -1 : 1; });
+  }
+
+  function buildMeetingMarkdown(meeting, studentsById, recordsByStudent, tagsById, today) {
+    var out = ['# ' + meeting.title, '', '- 일시: ' + meeting.date, '- 참석: ' + (meeting.attendees || '-'),
+      '- 상태: ' + MEETING_STATUS[meeting.status], '- 출력일: ' + (today || toDateStr(new Date())), ''];
+    out.push('## 안건 학생', '');
+    meeting.studentIds.forEach(function (sid) {
+      var s = studentsById[sid];
+      if (!s) return;
+      var recs = (recordsByStudent[sid] || []).filter(function (r) { return !r.deleted; });
+      var st = studentStats(recs, today || toDateStr(new Date()));
+      out.push('### ' + s.name + ' (' + classKey(s) + (s.number ? ' ' + s.number + '번' : '') + ')');
+      out.push('- 누적 ' + st.total + '건 · 최근 30일 ' + st.last30 + '건' + (st.topTag && tagsById[st.topTag] ? ' · 주요 분야 ' + tagsById[st.topTag].name : ''));
+      sortRecordsDesc(recs).slice(0, 5).forEach(function (r) {
+        var tags = r.tags.map(function (t) { return tagsById[t] ? tagsById[t].name : t; }).join('·');
+        out.push('- ' + r.date + ' [' + tags + '] ' + (r.locked ? '(담당 교사만 열람 가능한 기록)' : r.content.replace(/\n/g, ' ')));
+      });
+      out.push('');
+    });
+    out.push('## 회의록', '', meeting.notes || '-', '');
+    out.push('## 결정 사항', '');
+    if (!meeting.decisions.length) out.push('- 없음');
+    meeting.decisions.forEach(function (d) {
+      out.push('- [' + (d.done ? 'x' : ' ') + '] ' + d.text + (d.owner ? ' (담당: ' + d.owner + ')' : '') + (d.due ? ' (기한: ' + d.due + ')' : ''));
+    });
+    out.push('');
+    return out.join('\n');
+  }
+
   // ---------- 내보내기 ----------
   function tsvCell(v) { return String(v === undefined || v === null ? '' : v).replace(/[\t\r\n]+/g, ' '); }
 
@@ -451,7 +547,10 @@ var SOSLib = (function () {
     normalizeRecord: normalizeRecord, validateRecord: validateRecord, maskRecord: maskRecord, lockTitle: lockTitle,
     sortRecordsDesc: sortRecordsDesc, studentStats: studentStats, lastRecordDateByStudent: lastRecordDateByStudent,
     computeAlerts: computeAlerts, homeStats: homeStats, tagDistribution: tagDistribution,
-    buildTSV: buildTSV, buildMarkdown: buildMarkdown, parseRosterText: parseRosterText, studentSortKey: studentSortKey
+    buildTSV: buildTSV, buildMarkdown: buildMarkdown, parseRosterText: parseRosterText, studentSortKey: studentSortKey,
+    MEETING_STATUS: MEETING_STATUS, normalizeMeeting: normalizeMeeting, validateMeeting: validateMeeting,
+    canViewMeeting: canViewMeeting, canEditMeeting: canEditMeeting, maskMeeting: maskMeeting,
+    openDecisions: openDecisions, buildMeetingMarkdown: buildMeetingMarkdown
   };
 })();
 

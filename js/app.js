@@ -201,6 +201,7 @@
     if (name === 'student' && parts[1]) params.id = parts[1];
     if (name === 'record') { if (parts[1] === 'new') name = 'record.new'; else if (parts[2] === 'edit') { name = 'record.edit'; params.id = parts[1]; } }
     if (name === 'admin') { name = 'admin.' + (parts[1] || 'students'); }
+    if (name === 'meeting' && parts[1]) { name = 'meeting.detail'; params.id = parts[1]; }
     return { name: name, params: params, query: q };
   }
   function navigate(path, query) {
@@ -243,7 +244,7 @@
     var name = S.route.name;
     var views = {
       'home': viewHome, 'students': viewStudents, 'student': viewStudent, 'record.new': viewRecordForm, 'record.edit': viewRecordForm,
-      'records': viewRecords, 'stats': viewStats, 'settings': viewSettings, 'meeting': viewMeeting,
+      'records': viewRecords, 'stats': viewStats, 'settings': viewSettings, 'meeting': viewMeetings, 'meeting.detail': viewMeetingDetail,
       'admin.students': viewAdminStudents, 'admin.teachers': viewAdminTeachers, 'admin.tags': viewAdminTags
     };
     var fn = views[name] || viewHome;
@@ -532,6 +533,7 @@
       if (lockedCount && !unlockRemaining()) box.appendChild(h('div', { class: 'small', style: 'margin:10px 4px 0' }, '잠긴 기록 ' + lockedCount + '건이 있습니다. 열람 권한이 있으면 해제 버튼으로 열 수 있습니다.'));
       box.appendChild(h('div', { class: 'cards', style: 'margin-top:14px' }, shown.length ? shown.map(function (r) { return recordCard(r, s, reload); }) : h('div', { class: 'empty' }, '기록이 없습니다.')));
       box.appendChild(h('div', { class: 'section' }, h('button', { class: 'cta', onclick: function () { openRecordForm(s.id); } }, '＋ 이 학생 기록하기')));
+      box.appendChild(h('div', { style: 'text-align:center;margin-top:10px' }, h('button', { class: 'link-btn', onclick: function () { navigate('meeting/new', { student: s.id }); } }, '이 학생을 안건으로 회의 만들기')));
       if (s.memo) box.appendChild(h('div', { class: 'small', style: 'margin-top:10px' }, '메모: ' + s.memo));
     }
     function reload() {
@@ -811,12 +813,202 @@
     return box;
   }
 
-  function viewMeeting() {
+  // ------------------------------------------------------------------
+  // 통합지원 회의
+  // ------------------------------------------------------------------
+  function meetingCard(m) {
+    var names = m.studentIds.map(function (id) { var s = studentById(id); return s ? s.name : null; }).filter(Boolean);
+    return h('div', { class: 'glass card', style: 'cursor:pointer', onclick: function () { navigate('meeting/' + m.id); } },
+      h('div', { class: 'rec-head' }, h('span', { class: 'pill sm ghost', style: 'cursor:default' }, L.MEETING_STATUS[m.status]), L.formatDateKo(m.date) + ' · ' + m.createdByName,
+        m.locked ? lockBadge('열람 제한') : null),
+      h('div', { style: 'font-size:16px;font-weight:600;margin-top:8px' }, m.title),
+      h('div', { class: 'small', style: 'margin-top:4px' }, names.length ? '안건 학생 ' + names.length + '명: ' + names.slice(0, 5).join(', ') + (names.length > 5 ? ' 외' : '') : '안건 학생 없음',
+        !m.locked && m.decisions.length ? ' · 결정 ' + m.decisions.filter(function (d) { return d.done; }).length + '/' + m.decisions.length : ''));
+  }
+
+  function viewMeetings() {
+    var box = h('div', {}, loadingBox());
+    A.call('meetings.list').then(function (res) {
+      var list = res.meetings.map(function (m) { return Object.assign(L.normalizeMeeting(m), { locked: m.locked }); });
+      var planned = list.filter(function (m) { return m.status !== 'done'; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      var done = list.filter(function (m) { return m.status === 'done'; });
+      var open = L.openDecisions(list);
+      clear(box);
+      box.appendChild(h('div', { class: 'page-head' }, h('div', { class: 'grow' }, h('div', { class: 'h1' }, '통합지원 회의'), h('div', { class: 'muted', style: 'margin-top:4px' }, '안건 학생 선정 · 회의록 · 결정 사항 추적')),
+        h('button', { class: 'cta auto', onclick: function () { navigate('meeting/new'); } }, '＋ 새 회의')));
+      box.appendChild(h('div', { class: 'two-col section' },
+        h('div', { class: 'col-left cards' },
+          h('div', { class: 'kicker', style: 'padding:0 8px' }, '예정 회의 ' + planned.length + '건'),
+          planned.length ? planned.map(meetingCard) : h('div', { class: 'glass card empty' }, '예정된 회의가 없습니다.'),
+          done.length ? h('div', { class: 'kicker', style: 'padding:12px 8px 0' }, '완료 회의 ' + done.length + '건') : null,
+          done.map(meetingCard)),
+        h('div', { class: 'col-right cards' },
+          h('div', { class: 'glass card' + (open.length ? ' alert' : '') }, h('div', { class: 'h2', style: 'font-size:14.5px;color:' + (open.length ? '#8a1046' : 'inherit') }, '미완료 결정 사항 ' + open.length + '건'),
+            open.length ? open.slice(0, 8).map(function (d) {
+              return h('div', { class: 'row', style: 'padding:8px 6px', onclick: function () { navigate('meeting/' + d.meetingId); } },
+                h('div', { class: 'body' }, h('div', { style: 'font-size:13.5px' }, d.text), h('div', { class: 'sub' }, [d.owner ? '담당 ' + d.owner : '', d.due ? '기한 ' + d.due : '', d.meetingTitle].filter(Boolean).join(' · '))));
+            }) : h('div', { class: 'small', style: 'margin-top:6px' }, '열람 가능한 회의의 결정 사항이 모두 완료되었습니다.')),
+          h('div', { class: 'glass card' }, h('div', { class: 'h2', style: 'font-size:14.5px' }, '회의 내용을 볼 수 있는 사람'),
+            h('div', { class: 'list-check', style: 'margin-top:6px' }, h('div', { class: 'ok' }, '회의 작성자'), h('div', { class: 'ok' }, '상담·복지·보건 전담, 행정담당자'), h('div', { class: 'ok' }, '안건 학생의 담임교사'), h('div', { class: 'no' }, '그 외 교사는 날짜·제목만'))))));
+    }).catch(function (e) { clear(box); box.appendChild(errorBox(e)); });
+    return box;
+  }
+
+  function viewMeetingDetail() {
+    var id = S.route.params.id;
+    var box = h('div', {}, loadingBox());
+    if (id === 'new') {
+      var m = L.normalizeMeeting({ id: L.uuid(), date: today(), title: '', status: 'planned' });
+      if (S.route.query.student) m.studentIds = [S.route.query.student];
+      clear(box); box.appendChild(meetingForm(m, true, true));
+      return box;
+    }
+    A.call('meetings.get', { id: id }).then(function (res) {
+      var m = Object.assign(L.normalizeMeeting(res.meeting), { locked: res.meeting.locked });
+      clear(box);
+      if (m.locked) {
+        box.appendChild(h('div', {}, h('div', { class: 'topbar' }, h('button', { class: 'back glass', onclick: function () { navigate('meeting'); } }, icon('back')), h('div', { class: 'grow h1', style: 'font-size:22px' }, m.title)),
+          h('div', { class: 'glass card' }, h('div', { class: 'rec-lock' }, h('div', { class: 'icon' }, icon('lock')), h('div', {}, h('div', { class: 't1' }, '열람 제한된 회의'), h('div', { class: 't2' }, '작성자, 전담·행정 계정, 안건 학생의 담임만 내용을 볼 수 있습니다.'))))));
+        return;
+      }
+      box.appendChild(meetingForm(m, res.canEdit, false));
+    }).catch(function (e) { clear(box); box.appendChild(errorBox(e)); });
+    return box;
+  }
+
+  function meetingForm(m, canEdit, isNew) {
+    var saving = false;
+    var summaries = {};
+    var ro = !canEdit;
+    var titleIn = h('input', { class: 'input', placeholder: '회의 제목 (예: 9월 통합지원 회의)', value: m.title, disabled: ro, oninput: function (e) { m.title = e.target.value; } });
+    var dateIn = h('input', { class: 'input', type: 'date', value: m.date, disabled: ro, oninput: function (e) { m.date = e.target.value; } });
+    var attIn = h('input', { class: 'input', placeholder: '참석자 (예: 담임, 상담교사, 보건교사, 교감)', value: m.attendees, disabled: ro, oninput: function (e) { m.attendees = e.target.value; } });
+    var notesIn = h('textarea', { class: 'textarea', style: 'min-height:180px', placeholder: '논의 내용, 학생별 지원 방향, 연계 기관 등', value: m.notes, disabled: ro, oninput: function (e) { m.notes = e.target.value; } });
+    var statusBox = h('div', { class: 'pill-row' });
+    var studentsBox = h('div', { class: 'cards' });
+    var decisionsBox = h('div', { class: 'form' });
+    var errEl = h('div', { class: 'small', style: 'color:#8a1046;min-height:16px' });
+
+    function paintStatus() {
+      clear(statusBox);
+      Object.keys(L.MEETING_STATUS).forEach(function (k) {
+        statusBox.appendChild(h('button', { class: 'pill sm' + (m.status === k ? ' on' : ''), disabled: ro, onclick: function () { m.status = k; paintStatus(); } }, L.MEETING_STATUS[k]));
+      });
+    }
+
+    function studentSummary(s) {
+      var card = h('div', { class: 'glass card' });
+      var head = h('div', { style: 'display:flex;align-items:center;gap:10px' },
+        h('div', { class: 'avatar', style: 'width:36px;height:36px;border-radius:12px;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px' }, L.pad2(+s.number || 0)),
+        h('div', { style: 'flex:1;min-width:0' }, h('div', { style: 'font-weight:600;cursor:pointer', onclick: function () { navigate('student/' + s.id); } }, s.name), h('div', { class: 'small' }, L.classKey(s))),
+        ro ? null : h('button', { class: 'pill sm ghost', onclick: function () { m.studentIds = m.studentIds.filter(function (x) { return x !== s.id; }); paintStudents(); } }, '제외'));
+      var body = h('div', { class: 'small', style: 'margin-top:8px' }, '기록 불러오는 중…');
+      card.appendChild(head); card.appendChild(body);
+      var fill = function (recs) {
+        clear(body);
+        var live = recs.filter(function (r) { return !r.deleted; });
+        var st = L.studentStats(live, today());
+        body.appendChild(h('div', { class: 'pill-row', style: 'margin-bottom:8px' },
+          h('span', { class: 'pill sm ghost', style: 'cursor:default' }, '누적 ' + st.total), h('span', { class: 'pill sm ghost', style: 'cursor:default' }, '30일 ' + st.last30),
+          st.topTag ? tagChip(st.topTag) : null));
+        L.sortRecordsDesc(live).slice(0, 3).forEach(function (r) {
+          body.appendChild(h('div', { style: 'font-size:13px;line-height:1.5;padding:4px 0;border-top:1px solid rgba(11,18,32,.06)' },
+            h('span', { class: 'muted' }, L.formatShort(r.date) + ' '), r.tags.map(function (t) { return tagChip(t); }), ' ', r.locked ? lockBadge('잠김') : r.content));
+        });
+        if (!live.length) body.appendChild(h('div', { class: 'small' }, '기록 없음'));
+      };
+      if (summaries[s.id]) fill(summaries[s.id]);
+      else A.call('records.list', { studentId: s.id, limit: 30 }).then(function (res) { summaries[s.id] = res.records.map(function (r) { return Object.assign(L.normalizeRecord(r), { locked: r.locked }); }); fill(summaries[s.id]); }).catch(function () { body.textContent = '기록을 불러오지 못했습니다.'; });
+      return card;
+    }
+
+    function paintStudents() {
+      clear(studentsBox);
+      m.studentIds.forEach(function (id) { var s = studentById(id); if (s) studentsBox.appendChild(studentSummary(s)); });
+      if (!m.studentIds.length) studentsBox.appendChild(h('div', { class: 'empty' }, '안건 학생을 추가하세요.'));
+      if (!ro) studentsBox.appendChild(h('button', { class: 'pill', onclick: pickStudent }, '＋ 안건 학생 추가'));
+    }
+
+    function pickStudent() {
+      var q = '';
+      var listEl = h('div', { style: 'max-height:50vh;overflow:auto;margin-top:10px' });
+      var active = S.students.filter(function (s) { return (!s.status || s.status === '재학') && m.studentIds.indexOf(s.id) < 0; });
+      function paint() {
+        clear(listEl);
+        var list = q ? active.filter(function (s) { return s.name.indexOf(q) >= 0 || L.classKey(s).indexOf(q) >= 0; }) : L.scopeStudents(S.me, active);
+        list.slice(0, 60).forEach(function (s) {
+          listEl.appendChild(h('div', { class: 'row', onclick: function () { m.studentIds.push(s.id); md.close(); paintStudents(); } },
+            h('div', { class: 'avatar' }, L.pad2(+s.number || 0)), h('div', { class: 'body' }, h('div', { class: 'title' }, s.name), h('div', { class: 'sub' }, L.classKey(s)))));
+        });
+        if (!list.length) listEl.appendChild(h('div', { class: 'empty' }, '검색 결과가 없습니다.'));
+      }
+      var md = modal([h('div', { class: 'h2' }, '안건 학생 추가'),
+        h('div', { class: 'glass search', style: 'margin-top:10px' }, icon('search'), h('input', { type: 'search', placeholder: '이름·학급 검색 (전교생)', oninput: function (e) { q = e.target.value.trim(); paint(); } })), listEl]);
+      paint();
+    }
+
+    function paintDecisions() {
+      clear(decisionsBox);
+      m.decisions.forEach(function (d, i) {
+        decisionsBox.appendChild(h('div', { class: 'inline', style: 'align-items:flex-start' },
+          h('input', { type: 'checkbox', checked: d.done, disabled: ro, style: 'margin-top:14px;width:18px;height:18px', onchange: function (e) { d.done = e.target.checked; } }),
+          h('div', { class: 'grow form', style: 'gap:6px' },
+            h('input', { class: 'input', placeholder: '결정 사항', value: d.text, disabled: ro, oninput: function (e) { d.text = e.target.value; } }),
+            h('div', { class: 'inline' }, h('input', { class: 'input grow', placeholder: '담당자', value: d.owner, disabled: ro, oninput: function (e) { d.owner = e.target.value; } }),
+              h('input', { class: 'input', type: 'date', value: d.due, disabled: ro, style: 'width:auto', oninput: function (e) { d.due = e.target.value; } }),
+              ro ? null : h('button', { class: 'pill sm ghost', onclick: function () { m.decisions.splice(i, 1); paintDecisions(); } }, '삭제')))));
+      });
+      if (!m.decisions.length) decisionsBox.appendChild(h('div', { class: 'small' }, '결정 사항이 없습니다.'));
+      if (!ro) decisionsBox.appendChild(h('button', { class: 'pill', onclick: function () { m.decisions.push({ text: '', owner: '', due: '', done: false }); paintDecisions(); } }, '＋ 결정 사항 추가'));
+    }
+
+    function save() {
+      if (saving) return;
+      m.decisions = m.decisions.filter(function (d) { return d.text.trim(); });
+      var err = L.validateMeeting(m);
+      if (err) { errEl.textContent = err; return; }
+      saving = true; errEl.textContent = '';
+      A.call('meetings.save', { meeting: m }).then(function (res) {
+        toast('저장했습니다');
+        navigate('meeting/' + res.meeting.id);
+        if (!isNew) render();
+      }).catch(function (e) {
+        saving = false;
+        if (e.code === 'CONFLICT') {
+          var md = modal([h('div', { class: 'h2' }, '다른 사용자가 먼저 수정했습니다'), h('p', { class: 'muted', style: 'margin-top:8px;font-size:14px;line-height:1.6' }, '최신 내용을 불러와 다시 편집하거나, 내 내용으로 덮어쓸 수 있습니다.'),
+            h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { md.close(); render(); } }, '최신 내용 불러오기'),
+              h('button', { class: 'cta', onclick: function () { m.version = e.data.meeting.version; md.close(); save(); } }, '내 내용으로 덮어쓰기'))], { sticky: true });
+          return;
+        }
+        errEl.textContent = e.message;
+      });
+    }
+
+    function exportMD() {
+      var byId = {}; S.students.forEach(function (s) { byId[s.id] = s; });
+      var pending = m.studentIds.filter(function (id) { return !summaries[id]; });
+      Promise.all(pending.map(function (id) { return A.call('records.list', { studentId: id, limit: 30 }).then(function (res) { summaries[id] = res.records.map(function (r) { return Object.assign(L.normalizeRecord(r), { locked: r.locked }); }); }); }))
+        .then(function () {
+          download((m.title || '회의') + '_' + m.date + '.md', L.buildMeetingMarkdown(m, byId, summaries, tagsById(), today()), 'text/markdown;charset=utf-8');
+          A.call('export.log', { scope: 'meeting', detail: m.id }).catch(function () { /* 무시 */ });
+        });
+    }
+
+    paintStatus(); paintStudents(); paintDecisions();
     return h('div', {},
-      h('div', { class: 'page-head' }, h('div', { class: 'grow' }, h('div', { class: 'h1' }, '통합지원 회의'))),
-      h('div', { class: 'glass card' }, h('div', { class: 'h2' }, '2단계 기능으로 준비 중입니다'),
-        h('p', { class: 'muted', style: 'margin-top:8px;font-size:14px;line-height:1.7' }, '회의 안건 학생 선정, 분야별 기록 요약, 회의록 작성과 결정 사항 추적 기능이 들어갈 자리입니다. 지금은 통계·리포트의 학생별 보고서로 회의 자료를 만들 수 있습니다.'),
-        h('div', { style: 'margin-top:14px' }, h('button', { class: 'pill', onclick: function () { navigate('stats'); } }, '통계·리포트로 이동'))));
+      h('div', { class: 'topbar' }, h('button', { class: 'back glass', onclick: function () { navigate('meeting'); } }, icon('back')),
+        h('div', { class: 'grow' }, h('div', { class: 'kicker' }, isNew ? '새 회의' : (ro ? '읽기 전용 · ' : '') + m.createdByName + ' 작성'), h('div', { class: 'h1', style: 'font-size:22px' }, m.title || '통합지원 회의')),
+        isNew ? null : h('button', { class: 'pill sm', onclick: exportMD }, '회의 자료')),
+      h('div', { class: 'glass card form' }, titleIn, h('div', { class: 'grid-2' }, dateIn, h('div', { style: 'display:flex;align-items:center' }, statusBox)), attIn),
+      h('div', { class: 'section' }, h('div', { class: 'kicker' }, '안건 학생 ' + m.studentIds.length + '명'), studentsBox),
+      h('div', { class: 'section' }, h('div', { class: 'kicker' }, '회의록'), h('div', { class: 'glass', style: 'padding:6px' }, notesIn)),
+      h('div', { class: 'section' }, h('div', { class: 'kicker' }, '결정 사항'), h('div', { class: 'glass card' }, decisionsBox)),
+      errEl,
+      ro ? null : h('div', { class: 'section', style: 'display:flex;gap:10px' },
+        isNew ? null : h('button', { class: 'cta dim', style: 'flex:0 0 auto;width:auto;padding:16px 20px', onclick: function () {
+          confirmDialog('회의 삭제', '이 회의를 삭제할까요? 시트에는 삭제 표시로 남습니다.', '삭제', true).then(function (ok) { if (ok) A.call('meetings.delete', { id: m.id }).then(function () { toast('삭제했습니다'); navigate('meeting'); }).catch(function (e) { toast(e.message, true); }); });
+        } }, '삭제'),
+        h('button', { class: 'cta', onclick: save }, isNew ? '회의 만들기' : '저장')));
   }
 
   // ------------------------------------------------------------------

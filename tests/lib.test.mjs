@@ -135,3 +135,22 @@ test('학생 범위: 담임은 담임반, 교과는 수업반, 전담·관리자
   assert.deepEqual(L.scopeStudents(counsel, students).map(s => s.id), ['a', 'b', 'c']);
   assert.deepEqual(L.scopeStudents(admin, students).map(s => s.id), ['a', 'b', 'c']);
 });
+
+test('회의 열람·수정 권한: 작성자·전담·행정·안건 학생 담임만 열람, 교과교사는 제목만', () => {
+  const byId = {}; students.forEach(s => { byId[s.id] = s; });
+  const m = L.normalizeMeeting({ id: 'm1', date: '2026-09-10', title: '9월 회의', studentIds: 'c', notes: '비밀', decisions: JSON.stringify([{ text: '연계', owner: '상담', due: '', done: false }]), createdBy: 'c@s.kr' });
+  assert.equal(L.canViewMeeting(counsel, m, byId), true, '작성자·전담');
+  assert.equal(L.canViewMeeting(admin, m, byId), true, '행정');
+  assert.equal(L.canViewMeeting(homeroom, m, byId), false, '안건 학생이 담임반이 아님');
+  assert.equal(L.canViewMeeting(subject, m, byId), false, '교과');
+  const m2 = L.normalizeMeeting(Object.assign({}, m, { studentIds: 'a,c' }));
+  assert.equal(L.canViewMeeting(homeroom, m2, byId), true, '안건 학생 담임');
+  assert.equal(L.canEditMeeting(homeroom, m2), false, '담임은 열람만');
+  const masked = L.maskMeeting(m, false);
+  assert.equal(masked.locked, true); assert.equal(masked.notes, ''); assert.equal(masked.decisions.length, 0);
+  assert.equal(L.openDecisions([m]).length, 1);
+  assert.equal(L.openDecisions([masked]).length, 0);
+  assert.match(L.validateMeeting(L.normalizeMeeting({ id: 'x', date: '2026-09-10' })), /제목/);
+  const md = L.buildMeetingMarkdown(m2, byId, { a: [rec({ visibility: 'all', content: '공개' })] }, { welfare: { id: 'welfare', name: '복지' } }, '2026-09-04');
+  assert.match(md, /### 학생A/); assert.match(md, /\[복지\] 공개/); assert.match(md, /- \[ \] 연계 \(담당: 상담\)/);
+});

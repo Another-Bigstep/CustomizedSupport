@@ -8,7 +8,7 @@
 
 var SHEETS = {
   students: '학생', records: '관찰기록', tags: '태그', phrases: '문장',
-  teachers: '교사', views: '열람로그', logs: '로그', settings: '설정'
+  teachers: '교사', views: '열람로그', logs: '로그', settings: '설정', meetings: '회의'
 };
 
 var HEADERS = {
@@ -21,7 +21,8 @@ var HEADERS = {
     'active', 'mustChangePassword', 'createdAt'],
   views: ['at', 'email', 'name', 'action', 'recordId', 'studentId', 'result'],
   logs: ['at', 'email', 'action', 'target', 'detail'],
-  settings: ['key', 'value']
+  settings: ['key', 'value'],
+  meetings: ['id', 'date', 'title', 'attendees', 'status', 'studentIds', 'notes', 'decisions', 'createdBy', 'createdByName', 'createdAt', 'updatedAt', 'version', 'deleted']
 };
 
 var HEADER_LABELS = {
@@ -34,7 +35,8 @@ var HEADER_LABELS = {
     '사용', '비밀번호변경필요', '등록일시'],
   views: ['시각', '이메일', '이름', '동작', '기록ID', '학생ID', '결과'],
   logs: ['시각', '이메일', '동작', '대상', '상세'],
-  settings: ['키', '값']
+  settings: ['키', '값'],
+  meetings: ['ID', '날짜', '제목', '참석자', '상태', '안건학생ID', '회의록', '결정사항(JSON)', '작성자', '작성자이름', '작성일시', '수정일시', '버전', '삭제']
 };
 
 var TOKEN_HOURS = 12;
@@ -154,6 +156,10 @@ function route(req) {
     case 'phrases.save': return savePhrases(ctx, data);
     case 'settings.save': return saveSettings(ctx, data);
     case 'views.list': return listViews(ctx, data);
+    case 'meetings.list': return listMeetings(ctx);
+    case 'meetings.get': return getMeeting(ctx, data);
+    case 'meetings.save': return saveMeeting(ctx, data);
+    case 'meetings.delete': return deleteMeeting(ctx, data);
     case 'export.log': return logAction(ctx.me.email, 'export', data.scope || '', data.detail || '');
     default: throw fail('UNKNOWN_ACTION', '알 수 없는 요청입니다: ' + action);
   }
@@ -522,6 +528,80 @@ function deleteRecord(ctx, data) {
 
 function setVisibility(ctx, data) {
   return updateRecord(ctx, { id: data.id, version: data.version, patch: { visibility: data.visibility } });
+}
+
+// =====================================================================
+// 통합지원 회의
+// =====================================================================
+function readMeetings() {
+  return readAll('meetings').filter(function (m) { return m.id; }).map(function (m) {
+    var n = SOSLib.normalizeMeeting(m);
+    n.date = asDateStr(m.date);
+    return n;
+  });
+}
+
+function listMeetings(ctx) {
+  var sm = studentMap();
+  var list = readMeetings().filter(function (m) { return !m.deleted; })
+    .map(function (m) { return SOSLib.maskMeeting(m, SOSLib.canViewMeeting(ctx.me, m, sm)); })
+    .sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  return { meetings: list };
+}
+
+function getMeeting(ctx, data) {
+  var m = readMeetings().filter(function (x) { return x.id === data.id && !x.deleted; })[0];
+  if (!m) throw fail('NOT_FOUND', '회의를 찾을 수 없습니다.');
+  var sm = studentMap();
+  var canView = SOSLib.canViewMeeting(ctx.me, m, sm);
+  if (canView && m.createdBy !== ctx.me.email) {
+    var key = 'mview:' + ctx.me.email + ':' + m.id;
+    var cache = CacheService.getScriptCache();
+    if (!cache.get(key)) { cache.put(key, '1', 600); appendObject('views', { at: nowIso(), email: ctx.me.email, name: ctx.me.name, action: 'meeting', recordId: m.id, studentId: '', result: '열람' }); }
+  }
+  return { meeting: SOSLib.maskMeeting(m, canView), canEdit: SOSLib.canEditMeeting(ctx.me, m) };
+}
+
+function meetingToRow(m) {
+  return Object.assign({}, m, { studentIds: m.studentIds.join(','), decisions: JSON.stringify(m.decisions), deleted: m.deleted ? 'Y' : 'N' });
+}
+
+function saveMeeting(ctx, data) {
+  var me = ctx.me;
+  var input = SOSLib.normalizeMeeting(data.meeting || {});
+  var err = SOSLib.validateMeeting(input);
+  if (err) throw fail('BAD_REQUEST', err);
+  return withLock(function () {
+    var idx = findRowIndex('meetings', input.id);
+    if (!idx) {
+      input.createdBy = me.email; input.createdByName = me.name; input.createdAt = nowIso(); input.updatedAt = input.createdAt; input.version = 1; input.deleted = false;
+      appendObject('meetings', meetingToRow(input));
+      logAction(me.email, 'meeting.create', input.id, input.title);
+      return { meeting: input };
+    }
+    var cur = readMeetings().filter(function (x) { return x.id === input.id; })[0];
+    if (!cur || cur.deleted) throw fail('NOT_FOUND', '삭제된 회의입니다.');
+    if (!SOSLib.canEditMeeting(me, cur)) throw fail('FORBIDDEN', '작성자·전담·관리자만 수정할 수 있습니다.');
+    if (Number(data.meeting.version) !== cur.version) throw fail('CONFLICT', '다른 사용자가 먼저 수정했습니다. 최신 내용을 확인한 뒤 다시 저장하세요.', { meeting: cur });
+    ['date', 'title', 'attendees', 'status', 'studentIds', 'notes', 'decisions'].forEach(function (k) { cur[k] = input[k]; });
+    cur.version += 1; cur.updatedAt = nowIso();
+    writeObject('meetings', idx, meetingToRow(cur));
+    logAction(me.email, 'meeting.update', cur.id, cur.title);
+    return { meeting: cur };
+  });
+}
+
+function deleteMeeting(ctx, data) {
+  return withLock(function () {
+    var idx = findRowIndex('meetings', data.id);
+    var cur = readMeetings().filter(function (x) { return x.id === data.id; })[0];
+    if (!idx || !cur) throw fail('NOT_FOUND', '회의를 찾을 수 없습니다.');
+    if (!SOSLib.canEditMeeting(ctx.me, cur)) throw fail('FORBIDDEN', '작성자·전담·관리자만 삭제할 수 있습니다.');
+    cur.deleted = true; cur.version += 1; cur.updatedAt = nowIso();
+    writeObject('meetings', idx, meetingToRow(cur));
+    logAction(ctx.me.email, 'meeting.delete', cur.id, '');
+    return { id: cur.id };
+  });
 }
 
 // =====================================================================
