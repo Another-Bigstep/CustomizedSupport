@@ -257,7 +257,7 @@ var SOSMock = (function () {
       case 'teachers.upsert': {
         if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.');
         var nt = L.normalizeTeacher(data.teacher || {});
-        if (!nt.email || !nt.name) return fail('BAD_REQUEST', '이메일과 이름은 필수입니다.');
+        if (!nt.email || !nt.name) return fail('BAD_REQUEST', '아이디와 이름은 필수입니다.');
         if (!nt.roles.length) return fail('BAD_REQUEST', '역할을 하나 이상 선택하세요.');
         var ti = db.teachers.findIndex(function (x) { return x.email === nt.email; });
         var temp = null;

@@ -599,6 +599,10 @@ var HEADER_LABELS = {
   meetings: ['ID', '날짜', '제목', '참석자', '상태', '안건학생ID', '회의록', '결정사항(JSON)', '작성자', '작성자이름', '작성일시', '수정일시', '버전', '삭제']
 };
 
+// 최초 관리자 계정 (setup 실행 시 교사 시트가 비어 있을 때만 생성)
+var ADMIN_ID = 'admin';
+var ADMIN_PASSWORD = '12341234';
+
 var TOKEN_HOURS = 12;
 var LOCK_WAIT_MS = 10000;
 var MAX_FAILS = 5;
@@ -635,16 +639,14 @@ function setup() {
   }
   var teachers = readAll('teachers');
   if (teachers.length === 0) {
-    var email = Session.getEffectiveUser().getEmail();
     var salt = Utilities.getUuid();
-    var tempPw = 'admin' + String(Math.floor(Math.random() * 9000) + 1000);
     appendObject('teachers', {
-      email: email, name: '관리자', roles: 'admin', homeroom: '', classes: '', field: '',
-      passwordHash: hashSecret(tempPw, salt), pinHash: '', salt: salt,
-      active: 'Y', mustChangePassword: 'Y', createdAt: nowIso()
+      email: ADMIN_ID, name: '관리자', roles: 'admin', homeroom: '', classes: '', field: '',
+      passwordHash: hashSecret(ADMIN_PASSWORD, salt), pinHash: '', salt: salt,
+      active: 'Y', mustChangePassword: 'N', createdAt: nowIso()
     });
-    Logger.log('관리자 계정이 생성되었습니다. 이메일: ' + email + ' / 임시 비밀번호: ' + tempPw);
-    Logger.log('첫 로그인 후 비밀번호를 반드시 변경하세요.');
+    Logger.log('관리자 계정이 생성되었습니다. 아이디: ' + ADMIN_ID + ' / 비밀번호: ' + ADMIN_PASSWORD);
+    Logger.log('실제 운영 전에는 설정 화면에서 비밀번호를 꼭 변경하세요.');
   }
   Logger.log('설정 완료. 이제 "배포 > 새 배포 > 웹 앱" 으로 배포하세요.');
 }
@@ -798,12 +800,12 @@ function publicTeacher(row) {
 function login(data) {
   var email = String(data.email || '').trim().toLowerCase();
   var password = String(data.password || '');
-  if (!email || !password) throw fail('BAD_REQUEST', '이메일과 비밀번호를 입력하세요.');
+  if (!email || !password) throw fail('BAD_REQUEST', '아이디와 비밀번호를 입력하세요.');
   checkFails('login', email);
   var found = findTeacher(email);
   if (!found || !isYes(found.row.active) || hashSecret(password, found.row.salt) !== found.row.passwordHash) {
     var left = recordFail('login', email);
-    throw fail('AUTH', '이메일 또는 비밀번호가 올바르지 않습니다.' + (left > 0 ? ' (남은 시도 ' + left + '회)' : ''));
+    throw fail('AUTH', '아이디 또는 비밀번호가 올바르지 않습니다.' + (left > 0 ? ' (남은 시도 ' + left + '회)' : ''));
   }
   clearFails('login', email);
   var token = sign({ e: email, exp: Date.now() + TOKEN_HOURS * 3600 * 1000, n: Utilities.getUuid().slice(0, 8) });
@@ -1222,7 +1224,7 @@ function listTeachers(ctx) {
 function upsertTeacher(ctx, data) {
   requireAdmin(ctx);
   var t = SOSLib.normalizeTeacher(data.teacher || {});
-  if (!t.email || !t.name) throw fail('BAD_REQUEST', '이메일과 이름은 필수입니다.');
+  if (!t.email || !t.name) throw fail('BAD_REQUEST', '아이디와 이름은 필수입니다.');
   if (!t.roles.length) throw fail('BAD_REQUEST', '역할을 하나 이상 선택하세요.');
   return withLock(function () {
     var found = findTeacher(t.email);

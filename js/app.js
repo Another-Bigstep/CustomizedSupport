@@ -306,7 +306,7 @@
   // 로그인
   // ------------------------------------------------------------------
   function viewLogin() {
-    var email = h('input', { class: 'input', type: 'email', placeholder: '이메일', autocomplete: 'username' });
+    var email = h('input', { class: 'input', type: 'text', placeholder: '아이디 (이메일 또는 ID)', autocomplete: 'username', autocapitalize: 'off' });
     var pw = h('input', { class: 'input', type: 'password', placeholder: '비밀번호', autocomplete: 'current-password' });
     var err = h('div', { class: 'small', style: 'color:#8a1046;min-height:18px' });
     var btn = h('button', { class: 'cta', type: 'submit' }, '로그인');
@@ -1177,7 +1177,7 @@
     }
     function editTeacher(t) {
       t = t || L.normalizeTeacher({});
-      var email = h('input', { class: 'input', type: 'email', placeholder: '이메일 (로그인 ID)', value: t.email, disabled: !!t.email });
+      var email = h('input', { class: 'input', type: 'text', placeholder: '아이디 (이메일 또는 ID)', value: t.email, disabled: !!t.email, autocapitalize: 'off' });
       var name = h('input', { class: 'input', placeholder: '이름', value: t.name });
       var roles = {};
       var roleBox = h('div', { class: 'pill-row' }, Object.keys(L.ROLES).map(function (k) { roles[k] = t.roles.indexOf(k) >= 0; var b = h('button', { class: 'pill sm' + (roles[k] ? ' on' : ''), type: 'button', onclick: function () { roles[k] = !roles[k]; b.className = 'pill sm' + (roles[k] ? ' on' : ''); } }, L.ROLES[k].label); return b; }));
