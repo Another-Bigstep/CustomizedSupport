@@ -639,6 +639,14 @@ function setup() {
     if (sh.getLastRow() === 0) {
       sh.getRange(1, 1, 1, HEADERS[key].length).setValues([HEADER_LABELS[key]]).setFontWeight('bold');
       sh.setFrozenRows(1);
+    } else {
+      // 코드가 갱신되어 열이 늘어난 경우: 머리글만 채운다 (기존 데이터는 그대로)
+      var lastCol = sh.getLastColumn();
+      if (lastCol < HEADERS[key].length) {
+        var missing = HEADER_LABELS[key].slice(lastCol);
+        sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+        Logger.log(name + ' 시트에 열 추가: ' + missing.join(', '));
+      }
     }
   });
   var props = PropertiesService.getScriptProperties();
