@@ -154,3 +154,15 @@ test('회의 열람·수정 권한: 작성자·전담·행정·안건 학생 담
   const md = L.buildMeetingMarkdown(m2, byId, { a: [rec({ visibility: 'all', content: '공개' })] }, { welfare: { id: 'welfare', name: '복지' } }, '2026-09-04');
   assert.match(md, /### 학생A/); assert.match(md, /\[복지\] 공개/); assert.match(md, /- \[ \] 연계 \(담당: 상담\)/);
 });
+
+test('회원가입 검증: 관리자 역할 제외, 담임반 형식, 전담 분야 필수', () => {
+  const ok = L.normalizeTeacher({ email: 'kim.a@school.kr', name: '김교사', roles: 'homeroom,subject', homeroom: '기계과 3-2' });
+  assert.equal(L.validateSignup(ok, '12345678'), null);
+  assert.match(L.validateSignup(ok, '1234'), /8자/);
+  assert.match(L.validateSignup(L.normalizeTeacher({ email: 'xyz', name: '김', roles: 'admin' }), '12345678'), /역할/);
+  assert.match(L.validateSignup(L.normalizeTeacher({ email: 'kim', name: '김', roles: 'homeroom', homeroom: '3학년 2반' }), '12345678'), /담임반/);
+  assert.match(L.validateSignup(L.normalizeTeacher({ email: 'kim', name: '김', roles: 'specialist' }), '12345678'), /전담 분야/);
+  assert.match(L.validateSignup(L.normalizeTeacher({ email: '김교사', name: '김', roles: 'subject' }), '12345678'), /아이디/);
+  assert.equal(L.normalizeTeacher({ email: 'a', status: 'pending' }).status, 'pending');
+  assert.equal(L.normalizeTeacher({ email: 'a' }).status, 'approved', '상태 없는 기존 계정은 승인으로 간주');
+});
