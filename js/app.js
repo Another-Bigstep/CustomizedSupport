@@ -224,7 +224,7 @@
       S.students = (res.students || []).slice().sort(function (a, b) { return L.studentSortKey(a) < L.studentSortKey(b) ? -1 : 1; });
       S.unlock = A.unlockInfo();
       A.flushOutbox();
-      return true;
+      return refreshPending().then(function () { return true; });
     });
   }
 
@@ -264,7 +264,7 @@
       h('div', { class: 'brand' }, '관찰관리'),
       nav.map(function (n) {
         var on = (n[0] === 'home' && cur === 'home') || (n[0] !== 'home' && (cur === n[0] || (n[0] === 'students' && (cur === 'student' || cur === 'record')) || (n[0] === 'admin/teachers' && cur === 'admin')));
-        return h('div', { class: 'row' + (on ? ' on' : ''), onclick: function () { navigate(n[0]); } }, n[1], n[0] === 'admin/teachers' ? roleBadge('admin') : null);
+        return h('div', { class: 'row' + (on ? ' on' : ''), onclick: function () { navigate(n[0]); } }, n[1], n[0] === 'admin/teachers' ? [roleBadge('admin'), pendingBadge()] : null);
       }),
       h('div', { class: 'glass legend role-legend' },
         h('div', {}, roleBadge('homeroom'), '담임교사'), h('div', {}, roleBadge('specialist'), '분야 담당(상담·복지·보건)'),
@@ -305,6 +305,44 @@
   // ------------------------------------------------------------------
   // 로그인
   // ------------------------------------------------------------------
+  function signupModal() {
+    var t = { email: '', name: '', roles: [], homeroom: '', classes: '', field: '' };
+    var idIn = h('input', { class: 'input', placeholder: '아이디 (영문·숫자, 이메일도 가능)', autocapitalize: 'off', autocomplete: 'username', oninput: function (e) { t.email = e.target.value.trim().toLowerCase(); } });
+    var nameIn = h('input', { class: 'input', placeholder: '이름', oninput: function (e) { t.name = e.target.value; } });
+    var pw1 = h('input', { class: 'input', type: 'password', placeholder: '비밀번호 (8자 이상)', autocomplete: 'new-password' });
+    var pw2 = h('input', { class: 'input', type: 'password', placeholder: '비밀번호 확인', autocomplete: 'new-password' });
+    var homeroomIn = h('input', { class: 'input', placeholder: '담임반 (예: 기계과 3-2)', hidden: true, oninput: function (e) { t.homeroom = e.target.value.trim(); } });
+    var classesIn = h('input', { class: 'input', placeholder: '수업반 (세미콜론 구분, 예: 전기과 2-1;기계과 3-4)', hidden: true, oninput: function (e) { t.classes = e.target.value; } });
+    var fieldSel = h('select', { class: 'select', hidden: true, onchange: function (e) { t.field = e.target.value; } }, h('option', { value: '' }, '전담 분야 선택'), L.SPECIALIST_FIELDS.map(function (f) { return h('option', { value: f }, f); }));
+    var roleBox = h('div', { class: 'pill-row' }, ['homeroom', 'subject', 'specialist'].map(function (k) {
+      var b = h('button', { class: 'pill sm', type: 'button', onclick: function () {
+        var on = t.roles.indexOf(k) >= 0;
+        t.roles = on ? t.roles.filter(function (x) { return x !== k; }) : t.roles.concat([k]);
+        b.className = 'pill sm' + (on ? '' : ' on');
+        homeroomIn.hidden = t.roles.indexOf('homeroom') < 0;
+        classesIn.hidden = t.roles.indexOf('subject') < 0 && t.roles.indexOf('homeroom') < 0;
+        fieldSel.hidden = t.roles.indexOf('specialist') < 0;
+      } }, L.ROLES[k].label);
+      return b;
+    }));
+    var msg = h('div', { class: 'small', style: 'min-height:18px;color:#8a1046' });
+    var submit = h('button', { class: 'cta', type: 'button', onclick: function () {
+      if (pw1.value !== pw2.value) { msg.textContent = '비밀번호 확인이 일치하지 않습니다.'; return; }
+      var err = L.validateSignup(L.normalizeTeacher(t), pw1.value);
+      if (err) { msg.textContent = err; return; }
+      submit.disabled = true; msg.textContent = '';
+      A.call('signup', { teacher: t, password: pw1.value }).then(function () {
+        m.close();
+        modal([h('div', { class: 'h2' }, '가입 신청 완료'), h('p', { class: 'muted', style: 'margin-top:8px;font-size:14px;line-height:1.6' }, '관리자가 승인하면 로그인할 수 있습니다. 승인 여부는 관리자에게 확인하세요.'),
+          h('div', { class: 'modal-actions' }, h('button', { class: 'cta', onclick: function () { document.querySelector('.modal-back').remove(); } }, '확인'))]);
+      }).catch(function (e) { submit.disabled = false; msg.textContent = e.message; });
+    } }, '가입 신청');
+    var m = modal([h('div', { class: 'h2' }, '교사 회원가입'),
+      h('p', { class: 'small', style: 'margin:4px 0 12px' }, '신청 후 관리자(행정담당자)가 승인하면 사용할 수 있습니다. 역할과 담당 학급은 승인 시 관리자가 조정할 수 있습니다.'),
+      h('div', { class: 'form' }, idIn, nameIn, pw1, pw2, h('div', { class: 'kicker' }, '역할 (복수 선택)'), roleBox, homeroomIn, classesIn, fieldSel, msg),
+      h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '취소'), submit)], { sticky: true });
+  }
+
   function viewLogin() {
     var email = h('input', { class: 'input', type: 'text', placeholder: '아이디 (이메일 또는 ID)', autocomplete: 'username', autocapitalize: 'off' });
     var pw = h('input', { class: 'input', type: 'password', placeholder: '비밀번호', autocomplete: 'current-password' });
@@ -318,7 +356,8 @@
         return bootstrap();
       }).then(function () { S.route = parseRoute(); render(); }).catch(function (ex) { err.textContent = ex.message; btn.disabled = false; });
     }
-    var form = h('form', { class: 'form', onsubmit: doLogin }, email, pw, err, btn);
+    var form = h('form', { class: 'form', onsubmit: doLogin }, email, pw, err, btn,
+      h('div', { style: 'text-align:center;margin-top:4px' }, h('span', { class: 'small' }, '계정이 없으신가요? '), h('button', { class: 'link-btn', type: 'button', onclick: signupModal }, '교사 회원가입')));
     var demo = null;
     if (A.isDemo()) {
       demo = h('div', { style: 'margin-top:18px' },
@@ -1071,7 +1110,7 @@
     if (L.isAdmin(S.me)) box.appendChild(h('div', { class: 'glass card', style: 'margin-top:12px' }, h('div', { class: 'h2' }, '관리자'),
       h('div', { class: 'pill-row', style: 'margin-top:10px' },
         h('button', { class: 'pill', onclick: function () { navigate('admin/students'); } }, '학생 명단 관리'),
-        h('button', { class: 'pill', onclick: function () { navigate('admin/teachers'); } }, '교사 명단 관리'),
+        h('button', { class: 'pill', onclick: function () { navigate('admin/teachers'); } }, '교사 명단 관리', pendingBadge()),
         h('button', { class: 'pill', onclick: function () { navigate('admin/tags'); } }, '분야·문장 관리'))));
 
     if (A.isDemo()) box.appendChild(h('div', { class: 'glass card', style: 'margin-top:12px' }, h('div', { class: 'h2' }, '데모 모드'),
@@ -1080,6 +1119,13 @@
 
     box.appendChild(h('div', { class: 'section' }, h('button', { class: 'cta danger', onclick: function () { logout(); } }, '전체 잠금 (앱 종료)')));
     return box;
+  }
+
+  var pendingCount = 0;
+  function pendingBadge() { return pendingCount ? h('span', { class: 'lockbadge', style: 'margin-left:6px' }, '대기 ' + pendingCount) : null; }
+  function refreshPending() {
+    if (!S.me || !L.isAdmin(S.me)) return Promise.resolve(0);
+    return A.call('teachers.list').then(function (res) { pendingCount = res.filter(function (t) { return t.status === 'pending'; }).length; return pendingCount; }).catch(function () { return pendingCount; });
   }
 
   function accountCard(first) {
@@ -1164,15 +1210,48 @@
   function viewAdminTeachers() {
     if (!L.isAdmin(S.me)) return h('div', { class: 'empty' }, '관리자만 사용할 수 있습니다.');
     var listBox = h('div', { class: 'glass', style: 'padding:6px;margin-top:12px' }, loadingBox());
+    var tabBox = h('div', { class: 'pill-row', style: 'margin-top:12px' });
+    var bulkBox = h('div', { class: 'glass card', style: 'margin-top:12px', hidden: true });
     var teachers = [];
-    function load() { A.call('teachers.list').then(function (res) { teachers = res.map(L.normalizeTeacher); paint(); }).catch(function (e) { clear(listBox); listBox.appendChild(errorBox(e)); }); }
+    var tab = S.route.query.tab === 'all' ? 'all' : 'pending';
+    var selected = {};
+    function load() { A.call('teachers.list').then(function (res) { teachers = res.map(L.normalizeTeacher); if (tab === 'pending' && !pending().length && teachers.length) tab = S.route.query.tab ? tab : 'all'; paint(); }).catch(function (e) { clear(listBox); listBox.appendChild(errorBox(e)); }); }
+    function pending() { return teachers.filter(function (t) { return t.status === 'pending'; }); }
+    function approve(emails, all, ok) {
+      var label = (ok ? '승인' : '거절');
+      var n = all ? pending().length : emails.length;
+      if (!n) { toast('선택된 교사가 없습니다', true); return; }
+      confirmDialog('가입 ' + label, n + '명을 ' + label + '합니다.' + (ok ? ' 승인 후 바로 로그인할 수 있습니다.' : ' 거절된 계정은 로그인할 수 없습니다.'), label, !ok).then(function (yes) {
+        if (!yes) return;
+        A.call('teachers.approve', { emails: emails, all: !!all, approve: ok }).then(function (res) { toast(res.count + '명 ' + label + '했습니다'); selected = {}; refreshPending(); load(); }).catch(function (e) { toast(e.message, true); });
+      });
+    }
     function paint() {
+      clear(tabBox);
+      var pn = pending().length;
+      tabBox.appendChild(h('button', { class: 'pill sm' + (tab === 'pending' ? ' on' : ''), onclick: function () { tab = 'pending'; paint(); } }, '승인 대기 ' + pn));
+      tabBox.appendChild(h('button', { class: 'pill sm' + (tab === 'all' ? ' on' : ''), onclick: function () { tab = 'all'; paint(); } }, '전체 교사 ' + teachers.length));
       clear(listBox);
-      teachers.forEach(function (t) {
+      bulkBox.hidden = tab !== 'pending' || !pn;
+      if (tab === 'pending') {
+        clear(bulkBox);
+        var selCount = Object.keys(selected).filter(function (k) { return selected[k]; }).length;
+        bulkBox.appendChild(h('div', { class: 'inline' },
+          h('label', { class: 'checkbox' }, h('input', { type: 'checkbox', checked: selCount === pn && pn > 0, onchange: function (e) { pending().forEach(function (t) { selected[t.email] = e.target.checked; }); paint(); } }), '전체 선택'),
+          h('span', { class: 'small grow' }, selCount + '명 선택'),
+          h('button', { class: 'pill sm', onclick: function () { approve(Object.keys(selected).filter(function (k) { return selected[k]; }), false, true); } }, '선택 승인'),
+          h('button', { class: 'pill sm ghost', onclick: function () { approve(Object.keys(selected).filter(function (k) { return selected[k]; }), false, false); } }, '선택 거절'),
+          h('button', { class: 'cta auto', style: 'padding:9px 16px;font-size:13px', onclick: function () { approve([], true, true); } }, '대기 중 ' + pn + '명 일괄 승인')));
+      }
+      var list = tab === 'pending' ? pending() : teachers;
+      if (!list.length) { listBox.appendChild(h('div', { class: 'empty' }, tab === 'pending' ? '승인을 기다리는 가입 신청이 없습니다.' : '등록된 교사가 없습니다.')); return; }
+      list.forEach(function (t) {
+        var statusPill = t.status === 'pending' ? h('span', { class: 'lockbadge' }, '승인 대기') : t.status === 'rejected' ? h('span', { class: 'pill sm ghost', style: 'cursor:default' }, '거절') : (t.hasPin ? 'PIN 등록' : 'PIN 없음');
         listBox.appendChild(h('div', { class: 'row', onclick: function () { editTeacher(t); } },
+          tab === 'pending' ? h('input', { type: 'checkbox', checked: !!selected[t.email], style: 'width:18px;height:18px', onclick: function (e) { e.stopPropagation(); selected[t.email] = e.target.checked; paint(); } }) : null,
           h('div', { class: 'body' }, h('div', { class: 'title' }, t.name, roleBadge(L.primaryRole(t)), !t.active ? h('span', { class: 'small' }, ' (비활성)') : null),
-            h('div', { class: 'sub' }, t.email + ' · ' + t.roles.map(function (r) { return L.ROLES[r] ? L.ROLES[r].label : r; }).join(',') + (t.homeroom ? ' · ' + t.homeroom : '') + (t.field ? ' · ' + t.field : ''))),
-          h('div', { class: 'right' }, t.hasPin ? 'PIN 등록' : 'PIN 없음')));
+            h('div', { class: 'sub' }, t.email + ' · ' + t.roles.map(function (r) { return L.ROLES[r] ? L.ROLES[r].label : r; }).join(',') + (t.homeroom ? ' · ' + t.homeroom : '') + (t.classes.length ? ' · 수업 ' + t.classes.length + '반' : '') + (t.field ? ' · ' + t.field : '') + (t.status === 'pending' && t.requestedAt ? ' · 신청 ' + String(t.requestedAt).slice(0, 10) : ''))),
+          h('div', { class: 'right' }, statusPill)));
       });
     }
     function editTeacher(t) {
@@ -1186,26 +1265,32 @@
       var field = h('select', { class: 'select' }, h('option', { value: '' }, '전담 분야 없음'), L.SPECIALIST_FIELDS.map(function (f) { return h('option', { value: f, selected: t.field === f }, f); }));
       var active = h('input', { type: 'checkbox', checked: t.active !== false });
       var out = h('div', { class: 'small', style: 'min-height:16px' });
-      var m = modal([h('div', { class: 'h2' }, t.email ? '교사 수정' : '교사 추가'),
+      function saveTeacher(thenApprove) {
+        var teacher = { email: email.value.trim(), name: name.value.trim(), roles: Object.keys(roles).filter(function (k) { return roles[k]; }), homeroom: homeroom.value.trim(), classes: classes.value, field: field.value, active: active.checked };
+        return A.call('teachers.upsert', { teacher: teacher }).then(function (res) {
+          if (res.tempPassword) { out.textContent = '등록 완료. 임시 비밀번호: ' + res.tempPassword + ' (본인에게 직접 전달하세요)'; email.disabled = true; }
+          else if (!thenApprove) { m.close(); toast('저장했습니다'); }
+          load();
+        }).catch(function (e) { out.textContent = e.message; throw e; });
+      }
+      var m = modal([h('div', { class: 'h2' }, t.email ? (t.status === 'pending' ? '가입 신청 검토' : '교사 수정') : '교사 추가'),
+        t.status === 'pending' ? h('p', { class: 'small', style: 'margin-top:4px' }, '신청자가 입력한 내용입니다. 역할·학급을 고친 뒤 승인할 수 있습니다.') : null,
         h('div', { class: 'form', style: 'margin-top:12px' }, email, name, h('div', { class: 'kicker' }, '역할'), roleBox, homeroom, classes, field, h('label', { class: 'checkbox' }, active, '사용 중'), out),
-        h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '닫기'),
-          t.email ? h('button', { class: 'cta dim', onclick: function () {
+        h('div', { class: 'modal-actions', style: 'flex-wrap:wrap' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '닫기'),
+          t.email && t.status !== 'pending' ? h('button', { class: 'cta dim', onclick: function () {
             confirmDialog('비밀번호 초기화', t.name + ' 선생님의 비밀번호를 임시 비밀번호로 바꿉니다.', '초기화').then(function (ok) { if (ok) A.call('teachers.resetPassword', { email: t.email }).then(function (res) { out.textContent = '임시 비밀번호: ' + res.tempPassword + ' (본인에게 직접 전달하세요)'; }).catch(function (e) { out.textContent = e.message; }); });
           } }, '비밀번호 초기화') : null,
-          h('button', { class: 'cta', onclick: function () {
-            var teacher = { email: email.value.trim(), name: name.value.trim(), roles: Object.keys(roles).filter(function (k) { return roles[k]; }), homeroom: homeroom.value.trim(), classes: classes.value, field: field.value, active: active.checked };
-            A.call('teachers.upsert', { teacher: teacher }).then(function (res) {
-              if (res.tempPassword) { out.textContent = '등록 완료. 임시 비밀번호: ' + res.tempPassword + ' (본인에게 직접 전달하세요)'; email.disabled = true; }
-              else { m.close(); toast('저장했습니다'); }
-              load();
-            }).catch(function (e) { out.textContent = e.message; });
-          } }, '저장'))], { sticky: true });
+          t.status === 'pending' ? h('button', { class: 'cta dim', onclick: function () { m.close(); approve([t.email], false, false); } }, '거절') : null,
+          t.status === 'pending' ? h('button', { class: 'cta', onclick: function () {
+            // 저장(역할 조정) 후 승인 — upsert 가 status 를 approved 로 바꾼다
+            saveTeacher(true).then(function () { m.close(); toast(t.name + ' 선생님을 승인했습니다'); }).catch(function () { /* 메시지 표시됨 */ });
+          } }, '수정 내용으로 승인') : h('button', { class: 'cta', onclick: function () { saveTeacher(false).catch(function () { /* 메시지 표시됨 */ }); } }, '저장'))], { sticky: true });
     }
     load();
     return h('div', {},
-      h('div', { class: 'topbar' }, h('button', { class: 'back glass', onclick: function () { navigate('settings'); } }, icon('back')), h('div', { class: 'grow h1', style: 'font-size:24px' }, '교사 명단'), h('button', { class: 'pill', onclick: function () { editTeacher(null); } }, '＋ 교사')),
+      h('div', { class: 'topbar' }, h('button', { class: 'back glass', onclick: function () { navigate('settings'); } }, icon('back')), h('div', { class: 'grow h1', style: 'font-size:24px' }, '교사 명단'), h('button', { class: 'pill', onclick: function () { editTeacher(null); } }, '＋ 직접 추가')),
       h('div', { class: 'glass card role-legend' }, h('div', {}, roleBadge('homeroom'), '담임교사 — 담임반 학생의 잠긴 기록 열람 가능'), h('div', {}, roleBadge('specialist'), '분야 담당(상담·복지·보건) — 모든 잠긴 기록 열람 가능'), h('div', {}, roleBadge('subject'), '교과교사 — 수업반 기록 작성, 잠긴 기록은 본인 것만'), h('div', {}, roleBadge('admin'), '행정담당자 — 명단·계정 관리, 잠긴 기록 본문은 볼 수 없음')),
-      listBox);
+      tabBox, bulkBox, listBox);
   }
 
   // ------------------------------------------------------------------

@@ -134,8 +134,25 @@ var SOSLib = (function () {
       field: (t.field || '').trim(),
       active: t.active === undefined ? true : !!t.active,
       hasPin: !!t.hasPin,
-      mustChangePassword: !!t.mustChangePassword
+      mustChangePassword: !!t.mustChangePassword,
+      status: t.status === 'pending' || t.status === 'rejected' ? t.status : 'approved',
+      requestedAt: t.requestedAt || ''
     };
+  }
+
+  var TEACHER_STATUS = { pending: '승인 대기', approved: '승인', rejected: '거절' };
+
+  // 회원가입 입력 검증. 관리자 역할은 가입으로 얻을 수 없다.
+  function validateSignup(t, password) {
+    if (!t.email || t.email.length < 3) return '아이디를 3자 이상 입력하세요.';
+    if (!/^[a-z0-9@._\-]+$/.test(t.email)) return '아이디는 영문 소문자·숫자·@ . _ - 만 쓸 수 있습니다.';
+    if (!t.name || !t.name.trim()) return '이름을 입력하세요.';
+    if (!password || password.length < 8) return '비밀번호는 8자 이상이어야 합니다.';
+    var roles = t.roles.filter(function (r) { return r !== 'admin' && ROLES[r]; });
+    if (!roles.length) return '역할을 하나 이상 선택하세요.';
+    if (roles.indexOf('homeroom') >= 0 && !/^.+ \d+-\d+$/.test(t.homeroom || '')) return '담임반을 "기계과 3-2" 형식으로 입력하세요.';
+    if (roles.indexOf('specialist') >= 0 && SPECIALIST_FIELDS.indexOf(t.field) < 0) return '전담 분야(상담·복지·보건)를 선택하세요.';
+    return null;
   }
 
   function hasRole(teacher, role) { return !!teacher && (teacher.roles || []).indexOf(role) >= 0; }
@@ -543,6 +560,7 @@ var SOSLib = (function () {
     daysBetween: daysBetween, addDays: addDays, isoWeekKey: isoWeekKey,
     formatDateKo: formatDateKo, formatShort: formatShort, splitList: splitList,
     classKey: classKey, normalizeTeacher: normalizeTeacher, hasRole: hasRole, isAdmin: isAdmin,
+    TEACHER_STATUS: TEACHER_STATUS, validateSignup: validateSignup,
     roleForStudent: roleForStudent, roleLabel: roleLabel, primaryRole: primaryRole,
     canViewRestricted: canViewRestricted, canEditRecord: canEditRecord, canDeleteRecord: canDeleteRecord,
     scopeStudents: scopeStudents, scopeLabel: scopeLabel,
@@ -578,7 +596,7 @@ var HEADERS = {
   tags: ['id', 'name', 'color', 'order', 'active'],
   phrases: ['id', 'tagId', 'text', 'order'],
   teachers: ['email', 'name', 'roles', 'homeroom', 'classes', 'field', 'passwordHash', 'pinHash', 'salt',
-    'active', 'mustChangePassword', 'createdAt'],
+    'active', 'mustChangePassword', 'createdAt', 'status', 'requestedAt'],
   views: ['at', 'email', 'name', 'action', 'recordId', 'studentId', 'result'],
   logs: ['at', 'email', 'action', 'target', 'detail'],
   settings: ['key', 'value'],
@@ -591,8 +609,8 @@ var HEADER_LABELS = {
     '작성자', '작성자이름', '작성자역할', '역할표시', '작성일시', '수정일시', '버전', '삭제'],
   tags: ['ID', '이름', '색상', '순서', '사용'],
   phrases: ['ID', '분야ID', '문장', '순서'],
-  teachers: ['이메일', '이름', '역할', '담임반', '수업반', '전담분야', '비밀번호해시', 'PIN해시', '솔트',
-    '사용', '비밀번호변경필요', '등록일시'],
+  teachers: ['아이디', '이름', '역할', '담임반', '수업반', '전담분야', '비밀번호해시', 'PIN해시', '솔트',
+    '사용', '비밀번호변경필요', '등록일시', '승인상태', '가입신청일시'],
   views: ['시각', '이메일', '이름', '동작', '기록ID', '학생ID', '결과'],
   logs: ['시각', '이메일', '동작', '대상', '상세'],
   settings: ['키', '값'],
@@ -643,7 +661,7 @@ function setup() {
     appendObject('teachers', {
       email: ADMIN_ID, name: '관리자', roles: 'admin', homeroom: '', classes: '', field: '',
       passwordHash: hashSecret(ADMIN_PASSWORD, salt), pinHash: '', salt: salt,
-      active: 'Y', mustChangePassword: 'N', createdAt: nowIso()
+      active: 'Y', mustChangePassword: 'N', createdAt: nowIso(), status: 'approved', requestedAt: ''
     });
     Logger.log('관리자 계정이 생성되었습니다. 아이디: ' + ADMIN_ID + ' / 비밀번호: ' + ADMIN_PASSWORD);
     Logger.log('실제 운영 전에는 설정 화면에서 비밀번호를 꼭 변경하세요.');
@@ -689,6 +707,7 @@ function route(req) {
   var action = req.action;
   var data = req.data || {};
   if (action === 'login') return login(data);
+  if (action === 'signup') return signup(data);
   if (action === 'ping') return { time: nowIso() };
 
   var me = requireAuth(req.token);
@@ -714,6 +733,7 @@ function route(req) {
     case 'teachers.list': return listTeachers(ctx);
     case 'teachers.upsert': return upsertTeacher(ctx, data);
     case 'teachers.resetPassword': return resetPassword(ctx, data);
+    case 'teachers.approve': return approveTeachers(ctx, data);
     case 'tags.save': return saveTags(ctx, data);
     case 'phrases.save': return savePhrases(ctx, data);
     case 'settings.save': return saveSettings(ctx, data);
@@ -792,9 +812,51 @@ function findTeacher(email) {
 function publicTeacher(row) {
   var t = SOSLib.normalizeTeacher({
     email: row.email, name: row.name, roles: row.roles, homeroom: row.homeroom, classes: row.classes,
-    field: row.field, active: isYes(row.active), hasPin: !!row.pinHash, mustChangePassword: isYes(row.mustChangePassword)
+    field: row.field, active: isYes(row.active), hasPin: !!row.pinHash, mustChangePassword: isYes(row.mustChangePassword),
+    status: row.status || 'approved', requestedAt: row.requestedAt instanceof Date ? row.requestedAt.toISOString() : String(row.requestedAt || '')
   });
   return t;
+}
+
+// 회원가입: 승인 대기 상태로 저장된다. 관리자 역할은 선택할 수 없다.
+function signup(data) {
+  var t = SOSLib.normalizeTeacher(data.teacher || data);
+  t.roles = t.roles.filter(function (r) { return r !== 'admin'; });
+  var password = String(data.password || '');
+  var err = SOSLib.validateSignup(t, password);
+  if (err) throw fail('BAD_REQUEST', err);
+  var cache = CacheService.getScriptCache();
+  var n = Number(cache.get('signup:count') || 0);
+  if (n >= 200) throw fail('LOCKED', '가입 신청이 너무 많습니다. 잠시 후 다시 시도하세요.');
+  cache.put('signup:count', String(n + 1), 3600);
+  return withLock(function () {
+    if (findTeacher(t.email)) throw fail('BAD_REQUEST', '이미 사용 중인 아이디입니다.');
+    var salt = Utilities.getUuid();
+    appendObject('teachers', { email: t.email, name: t.name.trim(), roles: t.roles.join(','), homeroom: t.homeroom, classes: t.classes.join(';'),
+      field: t.field, passwordHash: hashSecret(password, salt), pinHash: '', salt: salt, active: 'Y', mustChangePassword: 'N',
+      createdAt: nowIso(), status: 'pending', requestedAt: nowIso() });
+    logAction(t.email, 'signup', '', t.name);
+    return { status: 'pending' };
+  });
+}
+
+function approveTeachers(ctx, data) {
+  requireAdmin(ctx);
+  var emails = (data.emails || []).map(function (e) { return String(e).trim().toLowerCase(); });
+  var status = data.approve === false ? 'rejected' : 'approved';
+  return withLock(function () {
+    var rows = readAll('teachers');
+    var count = 0;
+    rows.forEach(function (row, i) {
+      var target = data.all ? (row.status === 'pending') : emails.indexOf(String(row.email).toLowerCase()) >= 0;
+      if (!target || !row.email) return;
+      if (String(row.email).toLowerCase() === ctx.me.email) return;
+      updateRowFields('teachers', i + 2, { status: status });
+      count++;
+    });
+    logAction(ctx.me.email, 'teacher.' + status, data.all ? '(전체 대기)' : emails.join(','), count + '명');
+    return { count: count, status: status };
+  });
 }
 
 function login(data) {
@@ -808,6 +870,8 @@ function login(data) {
     throw fail('AUTH', '아이디 또는 비밀번호가 올바르지 않습니다.' + (left > 0 ? ' (남은 시도 ' + left + '회)' : ''));
   }
   clearFails('login', email);
+  if (found.row.status === 'pending') throw fail('PENDING', '관리자 승인을 기다리는 중입니다. 승인 후 로그인할 수 있습니다.');
+  if (found.row.status === 'rejected') throw fail('REJECTED', '가입 신청이 승인되지 않았습니다. 관리자에게 문의하세요.');
   var token = sign({ e: email, exp: Date.now() + TOKEN_HOURS * 3600 * 1000, n: Utilities.getUuid().slice(0, 8) });
   logAction(email, 'login', '', '');
   return { token: token, me: publicTeacher(found.row) };
@@ -817,7 +881,7 @@ function requireAuth(token) {
   var payload = verifyToken(token);
   if (!payload || payload.u) throw fail('AUTH', '로그인이 필요합니다.');
   var found = findTeacher(payload.e);
-  if (!found || !isYes(found.row.active)) throw fail('AUTH', '사용할 수 없는 계정입니다.');
+  if (!found || !isYes(found.row.active) || (found.row.status && found.row.status !== 'approved')) throw fail('AUTH', '사용할 수 없는 계정입니다.');
   var me = publicTeacher(found.row);
   me._row = found.row;
   me._index = found.index;
@@ -1229,7 +1293,7 @@ function upsertTeacher(ctx, data) {
   return withLock(function () {
     var found = findTeacher(t.email);
     var fields = { email: t.email, name: t.name, roles: t.roles.join(','), homeroom: t.homeroom, classes: t.classes.join(';'),
-      field: t.field, active: t.active ? 'Y' : 'N' };
+      field: t.field, active: t.active ? 'Y' : 'N', status: 'approved' };
     var tempPassword = null;
     if (found) {
       updateRowFields('teachers', found.index, fields);
@@ -1237,7 +1301,7 @@ function upsertTeacher(ctx, data) {
       var salt = Utilities.getUuid();
       tempPassword = randomPassword();
       appendObject('teachers', Object.assign(fields, { passwordHash: hashSecret(tempPassword, salt), pinHash: '', salt: salt,
-        mustChangePassword: 'Y', createdAt: nowIso() }));
+        mustChangePassword: 'Y', createdAt: nowIso(), requestedAt: '' }));
     }
     logAction(ctx.me.email, 'teacher.upsert', t.email, '');
     return { teacher: t, tempPassword: tempPassword };

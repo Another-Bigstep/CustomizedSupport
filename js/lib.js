@@ -132,8 +132,25 @@ var SOSLib = (function () {
       field: (t.field || '').trim(),
       active: t.active === undefined ? true : !!t.active,
       hasPin: !!t.hasPin,
-      mustChangePassword: !!t.mustChangePassword
+      mustChangePassword: !!t.mustChangePassword,
+      status: t.status === 'pending' || t.status === 'rejected' ? t.status : 'approved',
+      requestedAt: t.requestedAt || ''
     };
+  }
+
+  var TEACHER_STATUS = { pending: '승인 대기', approved: '승인', rejected: '거절' };
+
+  // 회원가입 입력 검증. 관리자 역할은 가입으로 얻을 수 없다.
+  function validateSignup(t, password) {
+    if (!t.email || t.email.length < 3) return '아이디를 3자 이상 입력하세요.';
+    if (!/^[a-z0-9@._\-]+$/.test(t.email)) return '아이디는 영문 소문자·숫자·@ . _ - 만 쓸 수 있습니다.';
+    if (!t.name || !t.name.trim()) return '이름을 입력하세요.';
+    if (!password || password.length < 8) return '비밀번호는 8자 이상이어야 합니다.';
+    var roles = t.roles.filter(function (r) { return r !== 'admin' && ROLES[r]; });
+    if (!roles.length) return '역할을 하나 이상 선택하세요.';
+    if (roles.indexOf('homeroom') >= 0 && !/^.+ \d+-\d+$/.test(t.homeroom || '')) return '담임반을 "기계과 3-2" 형식으로 입력하세요.';
+    if (roles.indexOf('specialist') >= 0 && SPECIALIST_FIELDS.indexOf(t.field) < 0) return '전담 분야(상담·복지·보건)를 선택하세요.';
+    return null;
   }
 
   function hasRole(teacher, role) { return !!teacher && (teacher.roles || []).indexOf(role) >= 0; }
@@ -541,6 +558,7 @@ var SOSLib = (function () {
     daysBetween: daysBetween, addDays: addDays, isoWeekKey: isoWeekKey,
     formatDateKo: formatDateKo, formatShort: formatShort, splitList: splitList,
     classKey: classKey, normalizeTeacher: normalizeTeacher, hasRole: hasRole, isAdmin: isAdmin,
+    TEACHER_STATUS: TEACHER_STATUS, validateSignup: validateSignup,
     roleForStudent: roleForStudent, roleLabel: roleLabel, primaryRole: primaryRole,
     canViewRestricted: canViewRestricted, canEditRecord: canEditRecord, canDeleteRecord: canDeleteRecord,
     scopeStudents: scopeStudents, scopeLabel: scopeLabel,

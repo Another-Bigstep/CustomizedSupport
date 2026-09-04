@@ -37,7 +37,9 @@ var SOSMock = (function () {
       { email: 'health@school.kr', name: '한소영', roles: 'specialist', homeroom: '', classes: '', field: '보건' },
       { email: 'subject@school.kr', name: '박지훈', roles: 'subject', homeroom: '', classes: '기계과 3-2;기계과 3-1;건축과 1-1', field: '' },
       { email: 'admin@school.kr', name: '오세라', roles: 'admin', homeroom: '', classes: '', field: '' }
-    ].map(function (t) { return Object.assign(L.normalizeTeacher(t), { hasPin: true, active: true }); });
+    ].map(function (t) { return Object.assign(L.normalizeTeacher(t), { hasPin: true, active: true, status: 'approved' }); });
+    teachers.push(Object.assign(L.normalizeTeacher({ email: 'new1@school.kr', name: '김새롬', roles: 'subject', classes: '건축과 1-1;건축과 1-2', status: 'pending', requestedAt: new Date().toISOString() }), { active: true }));
+    teachers.push(Object.assign(L.normalizeTeacher({ email: 'new2@school.kr', name: '정다운', roles: 'homeroom,subject', homeroom: '화학공업과 2-1', status: 'pending', requestedAt: new Date().toISOString() }), { active: true }));
 
     var today = L.toDateStr(new Date());
     var records = [];
@@ -135,16 +137,28 @@ var SOSMock = (function () {
 
   function route(action, data, body) {
     if (action === 'ping') return ok({ time: now() });
+    if (action === 'signup') {
+      var st = L.normalizeTeacher(data.teacher || data);
+      st.roles = st.roles.filter(function (r) { return r !== 'admin'; });
+      var se = L.validateSignup(st, String(data.password || ''));
+      if (se) return fail('BAD_REQUEST', se);
+      if (findTeacher(st.email)) return fail('BAD_REQUEST', '이미 사용 중인 아이디입니다.');
+      st.status = 'pending'; st.requestedAt = now(); st.active = true; st.hasPin = false;
+      db.teachers.push(st);
+      return ok({ status: 'pending' });
+    }
     if (action === 'login') {
       var t = findTeacher(String(data.email || '').toLowerCase());
-      if (!t) return fail('AUTH', '이메일 또는 비밀번호가 올바르지 않습니다. (데모: 아래 계정을 선택하세요)');
+      if (!t) return fail('AUTH', '아이디 또는 비밀번호가 올바르지 않습니다. (데모: 아래 계정을 선택하세요)');
+      if (t.status === 'pending') return fail('PENDING', '관리자 승인을 기다리는 중입니다. 승인 후 로그인할 수 있습니다.');
+      if (t.status === 'rejected') return fail('REJECTED', '가입 신청이 승인되지 않았습니다. 관리자에게 문의하세요.');
       db.logs.push({ at: now(), email: t.email, action: 'login' });
       return ok({ token: makeToken(t.email, 12 * 3600 * 1000), me: t });
     }
     var email = verify(body.token);
     if (!email) return fail('AUTH', '로그인이 필요합니다.');
     var me = findTeacher(email);
-    if (!me) return fail('AUTH', '사용할 수 없는 계정입니다.');
+    if (!me || me.status !== 'approved') return fail('AUTH', '사용할 수 없는 계정입니다.');
     var unlocked = verify(body.unlockToken, true) === email;
     var sm = studentMap();
     var live = function () { return db.records.filter(function (r) { return !r.deleted; }); };
@@ -261,8 +275,19 @@ var SOSMock = (function () {
         if (!nt.roles.length) return fail('BAD_REQUEST', '역할을 하나 이상 선택하세요.');
         var ti = db.teachers.findIndex(function (x) { return x.email === nt.email; });
         var temp = null;
+        nt.status = 'approved';
         if (ti >= 0) { nt.hasPin = db.teachers[ti].hasPin; db.teachers[ti] = nt; } else { temp = 'demo1234'; db.teachers.push(nt); }
         return ok({ teacher: nt, tempPassword: temp });
+      }
+      case 'teachers.approve': {
+        if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.');
+        var emails = (data.emails || []).map(function (e) { return String(e).toLowerCase(); });
+        var ns = data.approve === false ? 'rejected' : 'approved', cnt = 0;
+        db.teachers.forEach(function (t) {
+          var target = data.all ? t.status === 'pending' : emails.indexOf(t.email) >= 0;
+          if (target && t.email !== me.email) { t.status = ns; cnt++; }
+        });
+        return ok({ count: cnt, status: ns });
       }
       case 'teachers.resetPassword': if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.'); return ok({ tempPassword: 'demo' + rnd(9000 + 1000) });
       case 'tags.save': if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.'); db.tags = (data.tags || []).map(function (t, i) { return { id: t.id, name: t.name, color: t.color || 'etc', order: i + 1, active: t.active !== false }; }); return ok({ tags: db.tags });
