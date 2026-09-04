@@ -1,0 +1,14 @@
+{
+  "name": "학생맞춤통합지원 관찰관리",
+  "short_name": "관찰관리",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#eaf1ff",
+  "theme_color": "#eaf1ff",
+  "lang": "ko",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
