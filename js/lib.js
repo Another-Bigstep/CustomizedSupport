@@ -529,22 +529,93 @@ var SOSLib = (function () {
     return out.join('\n');
   }
 
+  // ---------- 명단 파일(엑셀·CSV·TSV·붙여넣기) 파싱 ----------
+  var STUDENT_TEMPLATE_HEADERS = ['과', '학년', '반', '번호', '이름', '메모', '상태'];
+  var TEACHER_TEMPLATE_HEADERS = ['아이디', '이름', '역할', '담임반', '수업반', '전담분야', '초기비밀번호'];
+  var ROLE_ALIASES = {
+    '담임': 'homeroom', '담임교사': 'homeroom', 'homeroom': 'homeroom',
+    '교과': 'subject', '교과교사': 'subject', 'subject': 'subject',
+    '전담': 'specialist', '분야담당': 'specialist', '분야 담당': 'specialist', 'specialist': 'specialist',
+    '상담': 'specialist', '복지': 'specialist', '보건': 'specialist', '상담교사': 'specialist', '보건교사': 'specialist', '복지담당': 'specialist',
+    '행정': 'admin', '행정담당자': 'admin', '관리자': 'admin', 'admin': 'admin'
+  };
+
+  // 탭·쉼표 구분 텍스트 → 행 배열 (큰따옴표 묶음 지원)
+  function parseDelimited(text) {
+    var rows = [];
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+      if (!line.trim()) return;
+      var delim = line.indexOf('\t') >= 0 ? '\t' : (line.indexOf(',') >= 0 ? ',' : null);
+      if (!delim) { rows.push(line.trim().split(/\s+/)); return; }
+      var cells = [], cur = '', q = false;
+      for (var i = 0; i < line.length; i++) {
+        var ch = line[i];
+        if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+        else if (ch === '"') q = true;
+        else if (ch === delim) { cells.push(cur); cur = ''; }
+        else cur += ch;
+      }
+      cells.push(cur);
+      rows.push(cells.map(function (c) { return c.trim(); }));
+    });
+    return rows;
+  }
+
+  function cellStr(v) { return v === null || v === undefined ? '' : String(v).trim(); }
+
+  function isHeaderRow(row, keywords) {
+    var first = cellStr(row[0]);
+    return keywords.some(function (k) { return first === k; });
+  }
+
+  function parseStudentRows(rows) {
+    var out = [], errors = [];
+    (rows || []).forEach(function (raw, i) {
+      var r = (raw || []).map(cellStr);
+      if (!r.some(Boolean)) return;
+      if (i === 0 && isHeaderRow(r, ['과', '학과', '계열'])) return;
+      if (r.length < 5) { errors.push((i + 1) + '행: 항목이 부족합니다 (과 학년 반 번호 이름)'); return; }
+      var grade = parseInt(r[1], 10), klass = parseInt(r[2], 10), number = parseInt(r[3], 10);
+      if (!r[0] || !r[4]) { errors.push((i + 1) + '행: 과와 이름은 비울 수 없습니다'); return; }
+      if (!grade || !klass || !number) { errors.push((i + 1) + '행: 학년·반·번호는 숫자여야 합니다'); return; }
+      out.push({ dept: r[0], grade: grade, klass: klass, number: number, name: r[4], memo: r[5] || '', status: r[6] || '재학' });
+    });
+    return { rows: out, errors: errors };
+  }
+
+  function parseTeacherRows(rows) {
+    var out = [], errors = [], seen = {};
+    (rows || []).forEach(function (raw, i) {
+      var r = (raw || []).map(cellStr);
+      if (!r.some(Boolean)) return;
+      if (i === 0 && isHeaderRow(r, ['아이디', 'ID', 'id', '이메일'])) return;
+      var email = r[0].toLowerCase(), name = r[1];
+      var roles = [], field = r[5] || '';
+      splitList(r[2]).forEach(function (word) {
+        var key = ROLE_ALIASES[word] || ROLE_ALIASES[word.replace(/\s+/g, '')];
+        if (!key) { errors.push((i + 1) + '행: 알 수 없는 역할 "' + word + '"'); return; }
+        if (roles.indexOf(key) < 0) roles.push(key);
+        if (!field && SPECIALIST_FIELDS.indexOf(word) >= 0) field = word;
+      });
+      if (!email) { errors.push((i + 1) + '행: 아이디가 없습니다'); return; }
+      if (!/^[a-z0-9@._\-]+$/.test(email)) { errors.push((i + 1) + '행: 아이디는 영문 소문자·숫자·@ . _ - 만 가능합니다 (' + email + ')'); return; }
+      if (!name) { errors.push((i + 1) + '행: 이름이 없습니다'); return; }
+      if (!roles.length) { errors.push((i + 1) + '행: 역할이 없습니다 (담임/교과/전담/행정)'); return; }
+      if (seen[email]) { errors.push((i + 1) + '행: 아이디 중복 ' + email); return; }
+      seen[email] = true;
+      var homeroom = r[3] || '';
+      if (roles.indexOf('homeroom') >= 0 && !/^.+ \d+-\d+$/.test(homeroom)) { errors.push((i + 1) + '행: 담임반은 "기계과 3-2" 형식이어야 합니다'); return; }
+      if (roles.indexOf('specialist') >= 0 && SPECIALIST_FIELDS.indexOf(field) < 0) { errors.push((i + 1) + '행: 전담 분야는 상담·복지·보건 중 하나여야 합니다'); return; }
+      var password = r[6] || '';
+      if (password && password.length < 8) { errors.push((i + 1) + '행: 초기비밀번호는 8자 이상이어야 합니다'); return; }
+      out.push({ email: email, name: name, roles: roles, homeroom: homeroom, classes: splitList(r[4]), field: roles.indexOf('specialist') >= 0 ? field : '', password: password });
+    });
+    return { teachers: out, errors: errors };
+  }
+
   // 명단 붙여넣기 파싱: "과 학년 반 번호 이름" 또는 TSV
   function parseRosterText(text) {
-    var rows = [];
-    var errors = [];
-    String(text || '').split(/\r?\n/).forEach(function (line, i) {
-      var t = line.trim();
-      if (!t) return;
-      var parts = t.indexOf('\t') >= 0 ? t.split('\t') : t.split(/\s+/);
-      parts = parts.map(function (p) { return p.trim(); });
-      if (parts[0] === '과' || parts[0] === '학과') return; // 머리글
-      if (parts.length < 5) { errors.push((i + 1) + '행: 항목이 부족합니다 (과 학년 반 번호 이름)'); return; }
-      var grade = parseInt(parts[1], 10), klass = parseInt(parts[2], 10), number = parseInt(parts[3], 10);
-      if (!grade || !klass || !number) { errors.push((i + 1) + '행: 학년·반·번호는 숫자여야 합니다'); return; }
-      rows.push({ dept: parts[0], grade: grade, klass: klass, number: number, name: parts[4], memo: parts[5] || '', status: parts[6] || '재학' });
-    });
-    return { rows: rows, errors: errors };
+    return parseStudentRows(parseDelimited(text));
   }
 
   function studentSortKey(s) {
@@ -566,6 +637,8 @@ var SOSLib = (function () {
     sortRecordsDesc: sortRecordsDesc, studentStats: studentStats, lastRecordDateByStudent: lastRecordDateByStudent,
     computeAlerts: computeAlerts, homeStats: homeStats, tagDistribution: tagDistribution,
     buildTSV: buildTSV, buildMarkdown: buildMarkdown, parseRosterText: parseRosterText, studentSortKey: studentSortKey,
+    STUDENT_TEMPLATE_HEADERS: STUDENT_TEMPLATE_HEADERS, TEACHER_TEMPLATE_HEADERS: TEACHER_TEMPLATE_HEADERS, ROLE_ALIASES: ROLE_ALIASES,
+    parseDelimited: parseDelimited, parseStudentRows: parseStudentRows, parseTeacherRows: parseTeacherRows,
     MEETING_STATUS: MEETING_STATUS, normalizeMeeting: normalizeMeeting, validateMeeting: validateMeeting,
     canViewMeeting: canViewMeeting, canEditMeeting: canEditMeeting, maskMeeting: maskMeeting,
     openDecisions: openDecisions, buildMeetingMarkdown: buildMeetingMarkdown

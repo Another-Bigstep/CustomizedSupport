@@ -20,7 +20,8 @@ var SOSApi = (function () {
   function unlockInfo() { var u = load(KEY_UNLOCK, null); if (u && u.expiresAt > Date.now()) return u; if (u) store(KEY_UNLOCK, null); return null; }
   function setUnlock(u) { store(KEY_UNLOCK, u); }
 
-  function isDemo() { return !cfg.apiUrl; }
+  // 데모 모드: apiUrl 이 비었거나, 주소에 ?demo=1 이 붙은 경우 (배포 후에도 미리보기·테스트용)
+  function isDemo() { return !cfg.apiUrl || /[?&]demo=1(&|$)/.test(location.search); }
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 

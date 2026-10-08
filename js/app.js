@@ -1156,6 +1156,136 @@
   }
 
   // ------------------------------------------------------------------
+  // 엑셀 양식 내려받기 / 파일 올리기 (관리자 공용)
+  // ------------------------------------------------------------------
+  function downloadBlob(name, blob) {
+    var a = h('a', { href: URL.createObjectURL(blob), download: name });
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  var sheetJsPromise = null;
+  function loadSheetJS() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (sheetJsPromise) return sheetJsPromise;
+    sheetJsPromise = new Promise(function (resolve, reject) {
+      var el = h('script', { src: 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', onload: function () { resolve(window.XLSX); }, onerror: function () { sheetJsPromise = null; reject(new Error('엑셀 읽기 모듈을 불러오지 못했습니다. 인터넷 연결을 확인하거나 파일을 CSV로 저장해 올려주세요.')); } });
+      document.head.appendChild(el);
+    });
+    return sheetJsPromise;
+  }
+
+  // 파일 → 행 배열. xlsx/xls 는 SheetJS, csv/tsv/txt 는 자체 파서
+  function readRowsFromFile(file) {
+    var name = (file.name || '').toLowerCase();
+    if (/\.(xlsx|xlsm|xls)$/.test(name)) {
+      return loadSheetJS().then(function (XLSX) {
+        return file.arrayBuffer().then(function (buf) {
+          var wb = XLSX.read(buf, { type: 'array' });
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+        });
+      });
+    }
+    return file.text().then(function (text) { return L.parseDelimited(text.replace(/^﻿/, '')); });
+  }
+
+  function templateXlsx(kind) {
+    if (kind === 'teachers') {
+      return XlsxLite.write([
+        { name: '교사명단', widths: [22, 12, 18, 16, 34, 12, 16], rows: [L.TEACHER_TEMPLATE_HEADERS,
+          ['kim.teacher', '김교사', '담임,교과', '기계과 3-2', '전기과 2-1;기계과 3-4', '', ''],
+          ['lee.counsel', '이상담', '전담', '', '', '상담', ''],
+          ['park.subject', '박교과', '교과', '', '건축과 1-1;건축과 1-2', '', 'school2026!']] },
+        { name: '작성방법', widths: [14, 70], rows: [['항목', '설명'],
+          ['아이디', '로그인 아이디. 영문 소문자·숫자·@ . _ - 만 가능 (이메일도 가능). 필수'],
+          ['이름', '교사 이름. 필수'],
+          ['역할', '담임, 교과, 전담, 행정 중 하나 이상을 쉼표로 구분. 필수'],
+          ['담임반', '담임 역할일 때 "과 학년-반" 형식 (예: 기계과 3-2)'],
+          ['수업반', '교과 역할일 때 수업하는 반을 세미콜론(;)으로 구분 (예: 전기과 2-1;기계과 3-4)'],
+          ['전담분야', '전담 역할일 때 상담 / 복지 / 보건 중 하나'],
+          ['초기비밀번호', '비우면 자동 생성됩니다. 입력 시 8자 이상. 첫 로그인 후 본인이 변경합니다'],
+          ['', ''],
+          ['참고', '예시 3행은 지우고 사용하세요. 같은 아이디가 이미 있으면 역할·학급만 갱신되고 비밀번호는 바뀌지 않습니다.']] }
+      ]);
+    }
+    return XlsxLite.write([
+      { name: '학생명단', widths: [12, 8, 8, 8, 12, 24, 10], rows: [L.STUDENT_TEMPLATE_HEADERS,
+        ['기계과', 3, 2, 1, '홍길동', '', '재학'],
+        ['기계과', 3, 2, 2, '김철수', '', '재학']] },
+      { name: '작성방법', widths: [14, 70], rows: [['항목', '설명'],
+        ['과', '학과 이름 (예: 기계과). 필수'], ['학년', '숫자. 필수'], ['반', '숫자. 필수'], ['번호', '숫자. 필수'], ['이름', '필수'],
+        ['메모', '선택'], ['상태', '재학 / 전출 / 졸업 / 휴학. 비우면 재학'],
+        ['', ''], ['참고', '예시 행은 지우고 사용하세요. 같은 과·학년·반·번호가 이미 있으면 이름·상태만 갱신됩니다. 나이스에서 내려받은 명단은 열 순서만 맞춰 붙여넣으면 됩니다.']] }
+    ]);
+  }
+
+  // 미리보기 모달 → 등록 → 결과
+  function importCard(kind, onDone) {
+    var isTeacher = kind === 'teachers';
+    var fileIn = h('input', { type: 'file', accept: '.xlsx,.xls,.csv,.tsv,.txt', hidden: true, onchange: function (e) { var f = e.target.files[0]; e.target.value = ''; if (f) handleFile(f); } });
+    var msg = h('div', { class: 'small', style: 'min-height:16px;margin-top:8px' });
+    function handleFile(file) {
+      msg.textContent = file.name + ' 읽는 중…';
+      readRowsFromFile(file).then(function (rows) {
+        var parsed = isTeacher ? L.parseTeacherRows(rows) : L.parseStudentRows(rows);
+        var items = isTeacher ? parsed.teachers : parsed.rows;
+        msg.textContent = '';
+        if (!items.length) { msg.textContent = '등록할 행이 없습니다. ' + (parsed.errors[0] || '양식을 확인하세요.'); return; }
+        preview(file.name, items, parsed.errors, rows);
+      }).catch(function (e) { msg.textContent = e.message; });
+    }
+    function preview(fileName, items, errors, rows) {
+      var head = isTeacher ? ['아이디', '이름', '역할', '담임반', '수업반', '전담', '비밀번호'] : ['과', '학년', '반', '번호', '이름', '상태'];
+      var table = h('div', { class: 'table-wrap', style: 'max-height:40vh;overflow:auto;margin-top:10px' }, h('table', { style: 'border-collapse:collapse;width:100%;font-size:12.5px' },
+        h('thead', {}, h('tr', {}, head.map(function (x) { return h('th', { style: 'text-align:left;padding:6px 8px;border-bottom:1px solid rgba(11,18,32,.12);white-space:nowrap' }, x); }))),
+        h('tbody', {}, items.slice(0, 300).map(function (t) {
+          var cells = isTeacher ? [t.email, t.name, t.roles.map(function (r) { return L.ROLES[r].short; }).join(','), t.homeroom, t.classes.join(';'), t.field, t.password ? '지정' : '자동'] : [t.dept, t.grade, t.klass, t.number, t.name, t.status];
+          return h('tr', {}, cells.map(function (c) { return h('td', { style: 'padding:5px 8px;border-bottom:1px solid rgba(11,18,32,.06);white-space:nowrap' }, String(c === undefined ? '' : c)); }));
+        }))));
+      var busy = false;
+      var m = modal([h('div', { class: 'h2' }, (isTeacher ? '교사' : '학생') + ' ' + items.length + '명 미리보기'),
+        h('div', { class: 'small', style: 'margin-top:4px' }, fileName + (items.length > 300 ? ' · 300행까지만 표시' : '')),
+        errors.length ? h('div', { class: 'glass card alert', style: 'margin-top:10px;font-size:12.5px;line-height:1.6;max-height:22vh;overflow:auto' }, h('div', { style: 'font-weight:600;color:#8a1046' }, '건너뛸 행 ' + errors.length + '개'), errors.slice(0, 20).map(function (e) { return h('div', {}, e); }), errors.length > 20 ? h('div', {}, '… 외 ' + (errors.length - 20) + '개') : null) : null,
+        table,
+        h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '취소'),
+          h('button', { class: 'cta', onclick: function () {
+            if (busy) return; busy = true;
+            A.call(isTeacher ? 'teachers.bulk' : 'students.bulk', { rows: rows }).then(function (res) {
+              m.close(); showResult(res, items.length);
+              if (onDone) onDone(res);
+            }).catch(function (e) { busy = false; toast(e.message, true); });
+          } }, '등록 (' + items.length + '명)'))], { sticky: true });
+    }
+    function showResult(res, total) {
+      var lines = [h('div', { style: 'font-size:14px;line-height:1.7;margin-top:8px' }, '추가 ' + res.added + '명 · 갱신 ' + res.updated + '명' + (res.errors && res.errors.length ? ' · 건너뜀 ' + res.errors.length + '행' : ''))];
+      var dl = null;
+      if (isTeacher && res.results) {
+        var added = res.results.filter(function (r) { return r.action === 'added'; });
+        if (added.length) {
+          lines.push(h('div', { class: 'glass card alert', style: 'margin-top:10px;font-size:13px;line-height:1.6' }, h('div', { style: 'font-weight:600;color:#8a1046' }, '새 계정 ' + added.length + '개의 임시 비밀번호는 지금만 확인할 수 있습니다'), '결과 파일을 내려받아 각 선생님께 직접 전달하세요. 첫 로그인 후 본인이 비밀번호를 바꿉니다.'));
+          lines.push(h('div', { class: 'table-wrap', style: 'max-height:30vh;overflow:auto;margin-top:8px' }, h('table', { style: 'border-collapse:collapse;width:100%;font-size:12.5px' },
+            h('thead', {}, h('tr', {}, ['아이디', '이름', '임시 비밀번호'].map(function (x) { return h('th', { style: 'text-align:left;padding:6px 8px;border-bottom:1px solid rgba(11,18,32,.12)' }, x); }))),
+            h('tbody', {}, added.map(function (r) { return h('tr', {}, [r.email, r.name, r.tempPassword].map(function (c) { return h('td', { class: 'mono', style: 'padding:5px 8px;border-bottom:1px solid rgba(11,18,32,.06)' }, c); })); })))));
+          dl = h('button', { class: 'cta', onclick: function () {
+            downloadBlob('교사계정_결과_' + today() + '.xlsx', XlsxLite.write([{ name: '결과', widths: [24, 12, 18, 10], rows: [['아이디', '이름', '임시 비밀번호', '결과']].concat(res.results.map(function (r) { return [r.email, r.name, r.tempPassword || '', r.action === 'added' ? '추가' : '갱신']; })) }]));
+          } }, '결과 파일 내려받기');
+        }
+      }
+      var m = modal([h('div', { class: 'h2' }, '등록 완료')].concat(lines, [h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '닫기'), dl)]), { sticky: !!dl });
+    }
+    return h('div', { class: 'glass card' },
+      h('div', { class: 'h2' }, '엑셀로 ' + (isTeacher ? '교사' : '학생') + ' 명단 올리기'),
+      h('p', { class: 'small', style: 'margin:6px 0 12px' }, isTeacher
+        ? '양식을 내려받아 채운 뒤 올리면 계정이 바로 승인 상태로 만들어지고 임시 비밀번호가 발급됩니다. 이미 있는 아이디는 역할·학급만 갱신됩니다.'
+        : '양식을 내려받아 채운 뒤 올립니다. 나이스·엑셀 명단은 열 순서(과·학년·반·번호·이름)만 맞추면 됩니다. CSV·TSV 파일도 됩니다.'),
+      h('div', { class: 'pill-row' },
+        h('button', { class: 'pill', onclick: function () { downloadBlob((isTeacher ? '교사명단_양식' : '학생명단_양식') + '.xlsx', templateXlsx(kind)); } }, '양식 내려받기 (.xlsx)'),
+        h('button', { class: 'cta auto', style: 'padding:9px 16px;font-size:13px', onclick: function () { fileIn.click(); } }, '파일 올리기'),
+        fileIn),
+      msg);
+  }
+
+  // ------------------------------------------------------------------
   // 관리자: 학생 명단
   // ------------------------------------------------------------------
   function viewAdminStudents() {
@@ -1191,7 +1321,8 @@
     paintList();
     return h('div', {},
       h('div', { class: 'topbar' }, h('button', { class: 'back glass', onclick: function () { navigate('settings'); } }, icon('back')), h('div', { class: 'grow h1', style: 'font-size:24px' }, '학생 명단 관리'), h('button', { class: 'pill', onclick: function () { editStudent(null); } }, '＋ 학생')),
-      h('div', { class: 'glass card' }, h('div', { class: 'h2' }, '명단 일괄 추가'), h('p', { class: 'small', style: 'margin:6px 0 10px' }, '같은 과·학년·반·번호가 이미 있으면 이름·상태만 갱신합니다. 학생은 삭제하지 않고 상태(전출·졸업)로 관리합니다.'), ta, msg,
+      importCard('students', function () { bootstrap().then(function () { paintList(); }); }),
+      h('div', { class: 'glass card', style: 'margin-top:12px' }, h('div', { class: 'h2' }, '붙여넣기로 추가'), h('p', { class: 'small', style: 'margin:6px 0 10px' }, '한 줄에 "과 학년 반 번호 이름". 같은 과·학년·반·번호가 이미 있으면 이름·상태만 갱신합니다. 학생은 삭제하지 않고 상태(전출·졸업)로 관리합니다.'), ta, msg,
         h('div', { style: 'margin-top:10px' }, h('button', { class: 'cta auto', onclick: function () {
           var parsed = L.parseRosterText(ta.value);
           if (!parsed.rows.length) { msg.textContent = parsed.errors.join(' / ') || '추가할 내용이 없습니다.'; return; }
@@ -1290,6 +1421,7 @@
     return h('div', {},
       h('div', { class: 'topbar' }, h('button', { class: 'back glass', onclick: function () { navigate('settings'); } }, icon('back')), h('div', { class: 'grow h1', style: 'font-size:24px' }, '교사 명단'), h('button', { class: 'pill', onclick: function () { editTeacher(null); } }, '＋ 직접 추가')),
       h('div', { class: 'glass card role-legend' }, h('div', {}, roleBadge('homeroom'), '담임교사 — 담임반 학생의 잠긴 기록 열람 가능'), h('div', {}, roleBadge('specialist'), '분야 담당(상담·복지·보건) — 모든 잠긴 기록 열람 가능'), h('div', {}, roleBadge('subject'), '교과교사 — 수업반 기록 작성, 잠긴 기록은 본인 것만'), h('div', {}, roleBadge('admin'), '행정담당자 — 명단·계정 관리, 잠긴 기록 본문은 볼 수 없음')),
+      importCard('teachers', function () { refreshPending(); load(); }),
       tabBox, bulkBox, listBox);
   }
 

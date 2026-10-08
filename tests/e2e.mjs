@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_PKG || 'playwright');
 import fs from 'node:fs';
 
-const BASE = process.env.BASE || 'http://localhost:8765/';
+const BASE = process.env.BASE || 'http://localhost:8765/?demo=1';
 const OUT = process.env.OUT || 'tests/screens';
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -243,7 +243,44 @@ async function newPage(viewport) {
   await page.waitForSelector('.login-card');
   await page.getByRole('button', { name: /오세라/ }).click();
   await page.waitForSelector('.stats');
+  // 엑셀/TSV 업로드: 교사 명단
+  await page.goto(BASE + '#/admin/teachers');
+  await page.waitForSelector('input[type=file]', { state: 'attached' });
+  await page.locator('input[type=file]').setInputFiles('tests/fixtures/teachers.tsv');
+  await page.waitForSelector('.modal table');
+  const previewText = await page.locator('.modal').textContent();
+  check(/교사 2명 미리보기/.test(previewText) && /건너뛸 행 1개/.test(previewText), '교사 파일 미리보기: 2명 등록, 1행 오류');
+  await page.screenshot({ path: `${OUT}/pc4c-upload-preview.png`, animations: 'disabled' });
+  await page.locator('.modal').getByRole('button', { name: /^등록/ }).click();
+  await page.waitForFunction(() => /등록 완료/.test(document.body.textContent));
+  const resultText = await page.locator('.modal').textContent();
+  check(/추가 2명/.test(resultText) && /uploadpw1/.test(resultText), '교사 일괄 등록 결과에 임시 비밀번호 표시');
+  await page.locator('.modal').getByRole('button', { name: '닫기' }).click();
+  await page.waitForFunction(() => /업로드담임/.test(document.querySelector('main')?.textContent || '') || true);
+  await page.evaluate(() => { localStorage.removeItem('sos.token'); });
+  await page.goto(BASE + '#/home');
+  await page.reload();
+  await page.waitForSelector('.login-card');
+  await page.locator('input[placeholder^="아이디"]').fill('upload2');
+  await page.locator('input[placeholder="비밀번호"]').fill('uploadpw1');
+  await page.getByRole('button', { name: '로그인' }).click();
+  await page.waitForSelector('.stats');
+  check(/업로드상담/.test(await page.locator('.sidebar .me').textContent()), '업로드로 만든 계정으로 로그인');
+  await page.evaluate(() => { localStorage.removeItem('sos.token'); });
+  await page.goto(BASE + '#/home');
+  await page.reload();
+  await page.waitForSelector('.login-card');
+  await page.getByRole('button', { name: /오세라/ }).click();
+  await page.waitForSelector('.stats');
+  // 학생 명단 업로드 + 붙여넣기
   await page.goto(BASE + '#/admin/students');
+  await page.waitForSelector('input[type=file]', { state: 'attached' });
+  await page.locator('input[type=file]').setInputFiles('tests/fixtures/students.tsv');
+  await page.waitForSelector('.modal table');
+  await page.locator('.modal').getByRole('button', { name: /^등록/ }).click();
+  await page.waitForFunction(() => /등록 완료/.test(document.body.textContent));
+  check(/추가 1명/.test(await page.locator('.modal').textContent()), '학생 파일 업로드 등록');
+  await page.locator('.modal').getByRole('button', { name: '닫기' }).click();
   await page.waitForSelector('textarea');
   await page.locator('textarea').fill('기계과 3 2 99 테스트학생');
   await page.getByRole('button', { name: '명단 추가' }).click();

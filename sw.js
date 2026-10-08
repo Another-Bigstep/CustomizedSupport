@@ -1,6 +1,6 @@
 /* 앱 껍데기만 캐시한다. API 요청은 캐시하지 않는다. */
-var CACHE = 'sos-shell-v1';
-var FILES = ['./', './index.html', './css/app.css', './js/config.js', './js/lib.js', './js/mock.js', './js/api.js', './js/app.js', './manifest.webmanifest', './icons/icon.svg'];
+var CACHE = 'sos-shell-v2';
+var FILES = ['./', './index.html', './css/app.css', './js/config.js', './js/lib.js', './js/xlsx-lite.js', './js/mock.js', './js/api.js', './js/app.js', './manifest.webmanifest', './icons/icon.svg'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
 });

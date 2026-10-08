@@ -187,7 +187,7 @@ var SOSMock = (function () {
       }
       case 'students.bulk': {
         if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.');
-        var parsed = L.parseRosterText(data.text || '');
+        var parsed = data.rows ? L.parseStudentRows(data.rows) : L.parseRosterText(data.text || '');
         if (!parsed.rows.length) return fail('BAD_REQUEST', '추가할 학생이 없습니다. ' + parsed.errors.join(' / '));
         var added = 0, updated = 0;
         parsed.rows.forEach(function (r) {
@@ -278,6 +278,19 @@ var SOSMock = (function () {
         nt.status = 'approved';
         if (ti >= 0) { nt.hasPin = db.teachers[ti].hasPin; db.teachers[ti] = nt; } else { temp = 'demo1234'; db.teachers.push(nt); }
         return ok({ teacher: nt, tempPassword: temp });
+      }
+      case 'teachers.bulk': {
+        if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.');
+        var tp = data.rows ? L.parseTeacherRows(data.rows) : { teachers: data.teachers || [], errors: [] };
+        if (!tp.teachers.length) return fail('BAD_REQUEST', '등록할 교사가 없습니다. ' + tp.errors.join(' / '));
+        var tres = [], tadd = 0, tupd = 0;
+        tp.teachers.forEach(function (raw) {
+          var t = L.normalizeTeacher(raw); t.status = 'approved'; t.active = true;
+          var i2 = db.teachers.findIndex(function (x) { return x.email === t.email; });
+          if (i2 >= 0) { t.hasPin = db.teachers[i2].hasPin; if (t.email === me.email) t.roles = db.teachers[i2].roles; db.teachers[i2] = t; tupd++; tres.push({ email: t.email, name: t.name, action: 'updated', tempPassword: '' }); }
+          else { t.hasPin = false; db.teachers.push(t); tadd++; tres.push({ email: t.email, name: t.name, action: 'added', tempPassword: raw.password || ('tmp' + Math.random().toString(36).slice(2, 8)) }); }
+        });
+        return ok({ added: tadd, updated: tupd, errors: tp.errors, results: tres });
       }
       case 'teachers.approve': {
         if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.');

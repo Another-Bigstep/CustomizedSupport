@@ -164,6 +164,7 @@ function route(req) {
     case 'teachers.upsert': return upsertTeacher(ctx, data);
     case 'teachers.resetPassword': return resetPassword(ctx, data);
     case 'teachers.approve': return approveTeachers(ctx, data);
+    case 'teachers.bulk': return bulkTeachers(ctx, data);
     case 'tags.save': return saveTags(ctx, data);
     case 'phrases.save': return savePhrases(ctx, data);
     case 'settings.save': return saveSettings(ctx, data);
@@ -683,7 +684,7 @@ function upsertStudent(ctx, data) {
 
 function bulkStudents(ctx, data) {
   requireAdmin(ctx);
-  var parsed = SOSLib.parseRosterText(data.text || '');
+  var parsed = data.rows ? SOSLib.parseStudentRows(data.rows) : SOSLib.parseRosterText(data.text || '');
   if (!parsed.rows.length) throw fail('BAD_REQUEST', '추가할 학생이 없습니다. ' + parsed.errors.join(' / '));
   return withLock(function () {
     var existing = listStudents();
@@ -694,7 +695,7 @@ function bulkStudents(ctx, data) {
     parsed.rows.forEach(function (r) {
       var k = key(r);
       if (byKey[k]) {
-        if (byKey[k].name !== r.name || byKey[k].status !== r.status) {
+        if (byKey[k].name !== r.name || byKey[k].status !== r.status || (r.memo && byKey[k].memo !== r.memo)) {
           var idx = findRowIndex('students', byKey[k].id);
           writeObject('students', idx, Object.assign({}, byKey[k], r, { updatedAt: nowIso(), updatedBy: ctx.me.email }));
           updated++;
@@ -704,9 +705,43 @@ function bulkStudents(ctx, data) {
         added++;
       }
     });
-    rows.forEach(function (r) { appendObject('students', r); });
+    if (rows.length) appendRows('students', rows.map(function (r) { return toRow('students', r); }));
     logAction(ctx.me.email, 'student.bulk', '', '추가 ' + added + ', 갱신 ' + updated);
     return { added: added, updated: updated, errors: parsed.errors };
+  });
+}
+
+// 교사 일괄 등록 (엑셀 업로드). 새 계정은 승인 상태로 만들고 임시 비밀번호를 돌려준다.
+function bulkTeachers(ctx, data) {
+  requireAdmin(ctx);
+  var parsed = data.rows ? SOSLib.parseTeacherRows(data.rows) : { teachers: data.teachers || [], errors: [] };
+  if (!parsed.teachers.length) throw fail('BAD_REQUEST', '등록할 교사가 없습니다. ' + parsed.errors.join(' / '));
+  return withLock(function () {
+    var rows = readAll('teachers');
+    var byEmail = {};
+    rows.forEach(function (r, i) { if (r.email) byEmail[String(r.email).toLowerCase()] = { row: r, index: i + 2 }; });
+    var results = [], newRows = [], added = 0, updated = 0;
+    parsed.teachers.forEach(function (t) {
+      t = SOSLib.normalizeTeacher(t);
+      var found = byEmail[t.email];
+      var fields = { name: t.name, roles: t.roles.join(','), homeroom: t.homeroom, classes: t.classes.join(';'), field: t.field, active: 'Y', status: 'approved' };
+      if (found) {
+        if (found.row.email === ctx.me.email) fields.roles = found.row.roles; // 본인 역할은 유지
+        updateRowFields('teachers', found.index, fields);
+        updated++;
+        results.push({ email: t.email, name: t.name, action: 'updated', tempPassword: '' });
+      } else {
+        var salt = Utilities.getUuid();
+        var given = parsed.teachers.filter(function (x) { return x.email === t.email; })[0];
+        var pw = (given && given.password) || randomPassword();
+        newRows.push(Object.assign({ email: t.email, passwordHash: hashSecret(pw, salt), pinHash: '', salt: salt, mustChangePassword: 'Y', createdAt: nowIso(), requestedAt: '' }, fields));
+        added++;
+        results.push({ email: t.email, name: t.name, action: 'added', tempPassword: pw });
+      }
+    });
+    if (newRows.length) appendRows('teachers', newRows.map(function (r) { return toRow('teachers', r); }));
+    logAction(ctx.me.email, 'teacher.bulk', '', '추가 ' + added + ', 갱신 ' + updated);
+    return { added: added, updated: updated, errors: parsed.errors, results: results };
   });
 }
 

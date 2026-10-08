@@ -166,3 +166,26 @@ test('회원가입 검증: 관리자 역할 제외, 담임반 형식, 전담 분
   assert.equal(L.normalizeTeacher({ email: 'a', status: 'pending' }).status, 'pending');
   assert.equal(L.normalizeTeacher({ email: 'a' }).status, 'approved', '상태 없는 기존 계정은 승인으로 간주');
 });
+
+test('교사 명단 파일 파싱: 머리글 건너뜀, 역할 별칭, 담임반·전담 분야 검증, 중복 아이디', () => {
+  const p = L.parseTeacherRows([
+    ['아이디', '이름', '역할', '담임반', '수업반', '전담분야', '초기비밀번호'],
+    ['Kim.T', '김교사', '담임, 교과', '기계과 3-2', '전기과 2-1;기계과 3-4', '', ''],
+    ['lee', '이상담', '상담', '', '', '', 'pass1234'],
+    ['park', '박교과', '교과', '', '', '', 'short'],
+    ['kim.t', '중복', '교과', '', '', '', ''],
+    ['choi', '최담임', '담임', '3학년 2반', '', '', ''],
+    ['', '', '', '', '', '', '']
+  ]);
+  assert.equal(p.teachers.length, 2);
+  assert.deepEqual(p.teachers[0], { email: 'kim.t', name: '김교사', roles: ['homeroom', 'subject'], homeroom: '기계과 3-2', classes: ['전기과 2-1', '기계과 3-4'], field: '', password: '' });
+  assert.equal(p.teachers[1].field, '상담'); assert.equal(p.teachers[1].password, 'pass1234');
+  assert.equal(p.errors.length, 3);
+  assert.match(p.errors[0], /8자/); assert.match(p.errors[1], /중복/); assert.match(p.errors[2], /담임반/);
+});
+
+test('학생 명단 파일 파싱과 CSV 파싱', () => {
+  const p = L.parseStudentRows([['과', '학년', '반', '번호', '이름', '메모', '상태'], ['기계과', '3', '2', '1', '홍길동', '', ''], ['전기과', 2, 1, 5, '김철수', '메모', '전출'], ['건축과', 'x', '1', '1', '오류', '', '']]);
+  assert.equal(p.rows.length, 2); assert.equal(p.rows[0].status, '재학'); assert.equal(p.rows[1].status, '전출'); assert.equal(p.errors.length, 1);
+  assert.deepEqual(L.parseDelimited('a,"b,c",d\n1\t2\n기계과 3 2 1 홍길동'), [['a', 'b,c', 'd'], ['1', '2'], ['기계과', '3', '2', '1', '홍길동']]);
+});
