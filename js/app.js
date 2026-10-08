@@ -1301,7 +1301,7 @@
       }
       var m = modal([h('div', { class: 'h2' }, '등록 완료')].concat(lines, [h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '닫기'), dl)]), { sticky: !!dl });
     }
-    return h('div', { class: 'glass card' },
+    return h('div', { class: 'glass card', style: 'margin-top:12px' },
       h('div', { class: 'h2' }, '엑셀로 ' + (isTeacher ? '교사' : '학생') + ' 명단 올리기'),
       h('p', { class: 'small', style: 'margin:6px 0 12px' }, isTeacher
         ? '양식을 내려받아 채운 뒤 올리면 계정이 바로 승인 상태로 만들어지고 임시 비밀번호가 발급됩니다. 이미 있는 아이디는 역할·학급만 갱신됩니다.'
