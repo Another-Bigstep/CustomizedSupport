@@ -1224,17 +1224,44 @@
     var isTeacher = kind === 'teachers';
     var fileIn = h('input', { type: 'file', accept: '.xlsx,.xls,.csv,.tsv,.txt', hidden: true, onchange: function (e) { var f = e.target.files[0]; e.target.value = ''; if (f) handleFile(f); } });
     var msg = h('div', { class: 'small', style: 'min-height:16px;margin-top:8px' });
+    var COL_LABEL = { dept: '학과', grade: '학년', klass: '반', number: '번호', name: '이름', memo: '메모', status: '상태', id: '학번', combo: '학년·반·번호' };
+    function colName(i) { var n = i + 1, t = ''; while (n > 0) { var m = (n - 1) % 26; t = String.fromCharCode(65 + m) + t; n = Math.floor((n - 1) / 26); } return t; }
     function handleFile(file) {
       msg.textContent = file.name + ' 읽는 중…';
       readRowsFromFile(file).then(function (rows) {
-        var parsed = isTeacher ? L.parseTeacherRows(rows) : L.parseStudentRows(rows);
-        var items = isTeacher ? parsed.teachers : parsed.rows;
         msg.textContent = '';
-        if (!items.length) { msg.textContent = '등록할 행이 없습니다. ' + (parsed.errors[0] || '양식을 확인하세요.'); return; }
-        preview(file.name, items, parsed.errors, rows);
+        if (isTeacher) { var tp = L.parseTeacherRows(rows); if (!tp.teachers.length) { msg.textContent = '등록할 행이 없습니다. ' + (tp.errors[0] || '양식을 확인하세요.'); return; } preview(file.name, tp.teachers, tp.errors, rows, {}); return; }
+        var sp = L.parseStudentRows(rows);
+        if (sp.needsDept) { askDept(file.name, rows, sp); return; }
+        if (!sp.rows.length) { msg.textContent = '등록할 행이 없습니다. ' + (sp.errors[0] || '머리글(학년·반·번호·성명)이 있는지 확인하세요.'); return; }
+        preview(file.name, sp.rows, sp.errors, rows, { mapping: sp.mapping, headerIndex: sp.headerIndex });
       }).catch(function (e) { msg.textContent = e.message; });
     }
-    function preview(fileName, items, errors, rows) {
+    // 학과 열이 없는 나이스 파일: 학과를 한 번 입력받는다
+    function askDept(fileName, rows, sp) {
+      var known = []; S.students.forEach(function (st) { if (st.dept && known.indexOf(st.dept) < 0) known.push(st.dept); });
+      var input = h('input', { class: 'input', placeholder: '학과 이름 (예: 기계과)', list: 'dept-list' });
+      var dl = h('datalist', { id: 'dept-list' }, known.map(function (d) { return h('option', { value: d }); }));
+      var m = modal([h('div', { class: 'h2' }, '이 파일에는 학과 열이 없습니다'),
+        h('p', { class: 'small', style: 'margin:6px 0 12px' }, '파일 전체가 한 학과라면 학과 이름을 입력하세요. 여러 학과가 섞여 있다면 파일에 "학과" 열을 추가해 다시 올려주세요.'),
+        h('div', { class: 'pill-row', style: 'margin-bottom:10px' }, known.map(function (d) { return h('button', { class: 'pill sm', onclick: function () { input.value = d; } }, d); })),
+        input, dl,
+        h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '취소'), h('button', { class: 'cta', onclick: function () {
+          var dept = input.value.trim(); if (!dept) { input.focus(); return; }
+          var p2 = L.parseStudentRows(rows, { defaultDept: dept });
+          m.close();
+          if (!p2.rows.length) { msg.textContent = '등록할 행이 없습니다. ' + (p2.errors[0] || ''); return; }
+          preview(fileName, p2.rows, p2.errors, rows, { mapping: p2.mapping, headerIndex: p2.headerIndex, defaultDept: dept });
+        } }, '계속'))], { sticky: true });
+      setTimeout(function () { input.focus(); }, 50);
+    }
+    function preview(fileName, items, errors, rows, info) {
+      info = info || {};
+      var mapNote = null;
+      if (info.mapping) {
+        var parts = Object.keys(info.mapping).map(function (k) { return (COL_LABEL[k] || k) + '→' + colName(info.mapping[k]) + '열'; });
+        mapNote = h('div', { class: 'small', style: 'margin-top:6px' }, (info.headerIndex + 1) + '행을 머리글로 인식: ' + parts.join(', ') + (info.defaultDept ? ' · 학과는 "' + info.defaultDept + '"로 일괄 적용' : ''));
+      }
       var head = isTeacher ? ['아이디', '이름', '역할', '담임반', '수업반', '전담', '비밀번호'] : ['과', '학년', '반', '번호', '이름', '상태'];
       var table = h('div', { class: 'table-wrap', style: 'max-height:40vh;overflow:auto;margin-top:10px' }, h('table', { style: 'border-collapse:collapse;width:100%;font-size:12.5px' },
         h('thead', {}, h('tr', {}, head.map(function (x) { return h('th', { style: 'text-align:left;padding:6px 8px;border-bottom:1px solid rgba(11,18,32,.12);white-space:nowrap' }, x); }))),
@@ -1245,12 +1272,13 @@
       var busy = false;
       var m = modal([h('div', { class: 'h2' }, (isTeacher ? '교사' : '학생') + ' ' + items.length + '명 미리보기'),
         h('div', { class: 'small', style: 'margin-top:4px' }, fileName + (items.length > 300 ? ' · 300행까지만 표시' : '')),
+        mapNote,
         errors.length ? h('div', { class: 'glass card alert', style: 'margin-top:10px;font-size:12.5px;line-height:1.6;max-height:22vh;overflow:auto' }, h('div', { style: 'font-weight:600;color:#8a1046' }, '건너뛸 행 ' + errors.length + '개'), errors.slice(0, 20).map(function (e) { return h('div', {}, e); }), errors.length > 20 ? h('div', {}, '… 외 ' + (errors.length - 20) + '개') : null) : null,
         table,
         h('div', { class: 'modal-actions' }, h('button', { class: 'cta dim', onclick: function () { m.close(); } }, '취소'),
           h('button', { class: 'cta', onclick: function () {
             if (busy) return; busy = true;
-            A.call(isTeacher ? 'teachers.bulk' : 'students.bulk', { rows: rows }).then(function (res) {
+            A.call(isTeacher ? 'teachers.bulk' : 'students.bulk', { rows: rows, defaultDept: info.defaultDept || '' }).then(function (res) {
               m.close(); showResult(res, items.length);
               if (onDone) onDone(res);
             }).catch(function (e) { busy = false; toast(e.message, true); });
@@ -1277,7 +1305,7 @@
       h('div', { class: 'h2' }, '엑셀로 ' + (isTeacher ? '교사' : '학생') + ' 명단 올리기'),
       h('p', { class: 'small', style: 'margin:6px 0 12px' }, isTeacher
         ? '양식을 내려받아 채운 뒤 올리면 계정이 바로 승인 상태로 만들어지고 임시 비밀번호가 발급됩니다. 이미 있는 아이디는 역할·학급만 갱신됩니다.'
-        : '양식을 내려받아 채운 뒤 올립니다. 나이스·엑셀 명단은 열 순서(과·학년·반·번호·이름)만 맞추면 됩니다. CSV·TSV 파일도 됩니다.'),
+        : '나이스에서 내려받은 엑셀을 그대로 올려도 됩니다. 머리글(학년·반·번호·성명·학과, 또는 학번)을 찾아 열을 자동으로 인식하고, 학과 열이 없으면 학과를 한 번 물어봅니다. 양식을 받아 채워도 되고 CSV·TSV 파일도 됩니다.'),
       h('div', { class: 'pill-row' },
         h('button', { class: 'pill', onclick: function () { downloadBlob((isTeacher ? '교사명단_양식' : '학생명단_양식') + '.xlsx', templateXlsx(kind)); } }, '양식 내려받기 (.xlsx)'),
         h('button', { class: 'cta auto', style: 'padding:9px 16px;font-size:13px', onclick: function () { fileIn.click(); } }, '파일 올리기'),

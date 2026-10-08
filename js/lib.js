@@ -568,19 +568,102 @@ var SOSLib = (function () {
     return keywords.some(function (k) { return first === k; });
   }
 
-  function parseStudentRows(rows) {
+  // 학생 명단 열 자동 인식 (나이스 엑셀 등 열 순서·머리글이 다른 파일)
+  var STUDENT_COLUMN_ALIASES = {
+    dept: ['과', '학과', '학과명', '계열', '전공', '학과(계열)', '과정', '학부'],
+    grade: ['학년'],
+    klass: ['반', '학급', '반명'],
+    number: ['번호', '출석번호', '출석 번호', '번'],
+    name: ['이름', '성명', '학생명', '학생이름', '학생 이름', '성 명'],
+    memo: ['메모', '비고', '특이사항'],
+    status: ['상태', '학적', '학적상태', '학적 상태', '재학여부'],
+    id: ['학번', '학생번호'],
+    combo: ['학년반번호', '학년/반/번호', '학년-반-번호', '학급(학년/반/번호)', '학년반']
+  };
+
+  function normHeader(v) { return cellStr(v).replace(/\s+/g, '').replace(/[()\[\]:：*]/g, ''); }
+
+  function detectStudentColumns(rows) {
+    var best = null;
+    var limit = Math.min(rows.length, 20);
+    for (var r = 0; r < limit; r++) {
+      var row = rows[r] || [];
+      var cols = {};
+      row.forEach(function (cell, c) {
+        var hd = normHeader(cell);
+        if (!hd) return;
+        Object.keys(STUDENT_COLUMN_ALIASES).forEach(function (key) {
+          if (cols[key] !== undefined) return;
+          var aliases = STUDENT_COLUMN_ALIASES[key];
+          for (var i = 0; i < aliases.length; i++) {
+            var a = aliases[i].replace(/\s+/g, '').replace(/[()]/g, '');
+            if (hd === a || (key === 'combo' && hd.indexOf('학년') >= 0 && hd.indexOf('반') >= 0 && hd.indexOf('번') >= 0)) { cols[key] = c; return; }
+          }
+        });
+      });
+      var hasPos = cols.grade !== undefined && cols.klass !== undefined && cols.number !== undefined;
+      if (cols.name === undefined || !(hasPos || cols.combo !== undefined || cols.id !== undefined)) continue;
+      var score = Object.keys(cols).length;
+      if (!best || score > best.score) best = { headerIndex: r, cols: cols, score: score };
+    }
+    return best;
+  }
+
+  function numIn(v) { var m = /(\d+)/.exec(cellStr(v)); return m ? parseInt(m[1], 10) : NaN; }
+
+  // 학번(예: 30212 → 3학년 2반 12번, 10105 → 1학년 1반 5번) 또는 "3-2-12", "3학년 2반 12번"
+  function splitPosition(v) {
+    var str = cellStr(v);
+    var m = /(\d+)\D+(\d+)\D+(\d+)/.exec(str);
+    if (m) return { grade: +m[1], klass: +m[2], number: +m[3] };
+    var d = str.replace(/\D/g, '');
+    if (d.length === 5) return { grade: +d[0], klass: +d.slice(1, 3), number: +d.slice(3) };
+    if (d.length === 4) return { grade: +d[0], klass: +d[1], number: +d.slice(2) };
+    return null;
+  }
+
+  // rows: 행 배열. opts.defaultDept: 학과 열이 없을 때 쓸 학과명
+  function parseStudentRows(rows, opts) {
+    opts = opts || {};
     var out = [], errors = [];
+    var det = detectStudentColumns(rows || []);
+    var mapping = null, needsDept = false;
+    if (det) {
+      var cols = det.cols;
+      mapping = {};
+      Object.keys(cols).forEach(function (k) { mapping[k] = cols[k]; });
+      if (cols.dept === undefined && !opts.defaultDept) needsDept = true;
+      (rows || []).forEach(function (raw, i) {
+        if (i <= det.headerIndex) return;
+        var r = (raw || []).map(cellStr);
+        if (!r.some(Boolean)) return;
+        var name = r[cols.name] || '';
+        if (!name || /^(합계|계|총계|소계)$/.test(name) || /^\d+\s*명$/.test(name)) return; // 합계·빈 행
+        var pos = null;
+        if (cols.grade !== undefined && cols.klass !== undefined && cols.number !== undefined) pos = { grade: numIn(r[cols.grade]), klass: numIn(r[cols.klass]), number: numIn(r[cols.number]) };
+        if ((!pos || !pos.grade) && cols.combo !== undefined) pos = splitPosition(r[cols.combo]);
+        if ((!pos || !pos.grade) && cols.id !== undefined) pos = splitPosition(r[cols.id]);
+        if (!pos || !pos.grade || !pos.klass || !pos.number) { if (/^(합계|계|총계|소계)/.test(r[0] || '')) return; errors.push((i + 1) + '행: 학년·반·번호를 읽을 수 없습니다 (' + name + ')'); return; }
+        var dept = cols.dept !== undefined ? r[cols.dept] : (opts.defaultDept || '');
+        if (!dept) { errors.push((i + 1) + '행: 학과가 없습니다 (' + name + ')'); return; }
+        var status = cols.status !== undefined ? r[cols.status] : '';
+        out.push({ dept: dept, grade: pos.grade, klass: pos.klass, number: pos.number, name: name,
+          memo: cols.memo !== undefined ? r[cols.memo] : '', status: status || '재학' });
+      });
+      return { rows: out, errors: errors, mapping: mapping, needsDept: needsDept, headerIndex: det.headerIndex };
+    }
+    // 머리글이 없으면 고정 순서: 과 학년 반 번호 이름 [메모] [상태]
     (rows || []).forEach(function (raw, i) {
       var r = (raw || []).map(cellStr);
       if (!r.some(Boolean)) return;
       if (i === 0 && isHeaderRow(r, ['과', '학과', '계열'])) return;
       if (r.length < 5) { errors.push((i + 1) + '행: 항목이 부족합니다 (과 학년 반 번호 이름)'); return; }
-      var grade = parseInt(r[1], 10), klass = parseInt(r[2], 10), number = parseInt(r[3], 10);
+      var grade = numIn(r[1]), klass = numIn(r[2]), number = numIn(r[3]);
       if (!r[0] || !r[4]) { errors.push((i + 1) + '행: 과와 이름은 비울 수 없습니다'); return; }
       if (!grade || !klass || !number) { errors.push((i + 1) + '행: 학년·반·번호는 숫자여야 합니다'); return; }
       out.push({ dept: r[0], grade: grade, klass: klass, number: number, name: r[4], memo: r[5] || '', status: r[6] || '재학' });
     });
-    return { rows: out, errors: errors };
+    return { rows: out, errors: errors, mapping: null, needsDept: false, headerIndex: -1 };
   }
 
   function parseTeacherRows(rows) {
@@ -639,6 +722,7 @@ var SOSLib = (function () {
     buildTSV: buildTSV, buildMarkdown: buildMarkdown, parseRosterText: parseRosterText, studentSortKey: studentSortKey,
     STUDENT_TEMPLATE_HEADERS: STUDENT_TEMPLATE_HEADERS, TEACHER_TEMPLATE_HEADERS: TEACHER_TEMPLATE_HEADERS, ROLE_ALIASES: ROLE_ALIASES,
     parseDelimited: parseDelimited, parseStudentRows: parseStudentRows, parseTeacherRows: parseTeacherRows,
+    detectStudentColumns: detectStudentColumns, STUDENT_COLUMN_ALIASES: STUDENT_COLUMN_ALIASES,
     MEETING_STATUS: MEETING_STATUS, normalizeMeeting: normalizeMeeting, validateMeeting: validateMeeting,
     canViewMeeting: canViewMeeting, canEditMeeting: canEditMeeting, maskMeeting: maskMeeting,
     openDecisions: openDecisions, buildMeetingMarkdown: buildMeetingMarkdown

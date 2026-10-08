@@ -109,7 +109,7 @@ test('명단 붙여넣기 파싱: 공백·탭 구분, 머리글 무시, 오류 �
   const p = L.parseRosterText('과\t학년\t반\t번호\t이름\n기계과\t3\t2\t12\t홍길동\n전기과 2 1 3 김철수 메모\n건축과 x 1 1 오류');
   assert.equal(p.rows.length, 2);
   assert.deepEqual(p.rows[0], { dept: '기계과', grade: 3, klass: 2, number: 12, name: '홍길동', memo: '', status: '재학' });
-  assert.equal(p.rows[1].memo, '메모');
+  assert.equal(p.rows[1].memo, '', '머리글에 없는 열은 무시');
   assert.equal(p.errors.length, 1);
 });
 
@@ -188,4 +188,21 @@ test('학생 명단 파일 파싱과 CSV 파싱', () => {
   const p = L.parseStudentRows([['과', '학년', '반', '번호', '이름', '메모', '상태'], ['기계과', '3', '2', '1', '홍길동', '', ''], ['전기과', 2, 1, 5, '김철수', '메모', '전출'], ['건축과', 'x', '1', '1', '오류', '', '']]);
   assert.equal(p.rows.length, 2); assert.equal(p.rows[0].status, '재학'); assert.equal(p.rows[1].status, '전출'); assert.equal(p.errors.length, 1);
   assert.deepEqual(L.parseDelimited('a,"b,c",d\n1\t2\n기계과 3 2 1 홍길동'), [['a', 'b,c', 'd'], ['1', '2'], ['기계과', '3', '2', '1', '홍길동']]);
+});
+
+test('나이스 엑셀 열 자동 인식: 제목 행·열 순서·성명·학번·합계 행', () => {
+  const neis = [['2026학년도 학생 명단'], [], ['학년', '반', '번호', '성명', '성별', '생년월일', '학과'], ['3', '2', '1', '홍길동', '남', '2008-01-01', '기계과'], ['3', '2', '2', '김철수', '남', '', '기계과'], ['합계', '', '', '2명']];
+  const p = L.parseStudentRows(neis);
+  assert.equal(p.headerIndex, 2); assert.equal(p.rows.length, 2); assert.equal(p.errors.length, 0);
+  assert.deepEqual(p.mapping, { grade: 0, klass: 1, number: 2, name: 3, dept: 6 });
+  assert.equal(p.rows[0].dept, '기계과');
+  const byId = [['학번', '성명', '학적상태'], ['30212', '박영희', '재학'], ['10105', '이민수', '전출']];
+  const q = L.parseStudentRows(byId);
+  assert.equal(q.needsDept, true); assert.equal(q.rows.length, 0);
+  const q2 = L.parseStudentRows(byId, { defaultDept: '전기과' });
+  assert.deepEqual(q2.rows.map(r => [r.grade, r.klass, r.number, r.status]), [[3, 2, 12, '재학'], [1, 1, 5, '전출']]);
+  const combo = L.parseStudentRows([['학년/반/번호', '이름'], ['3학년 2반 12번', '최지우']], { defaultDept: '건축과' });
+  assert.deepEqual(combo.rows[0], { dept: '건축과', grade: 3, klass: 2, number: 12, name: '최지우', memo: '', status: '재학' });
+  const labeled = L.parseStudentRows([['학과', '학년', '반', '번호', '이름'], ['화학공업과', '1학년', '3반', '7번', '정우']]);
+  assert.deepEqual([labeled.rows[0].grade, labeled.rows[0].klass, labeled.rows[0].number], [1, 3, 7]);
 });

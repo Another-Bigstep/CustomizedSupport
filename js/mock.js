@@ -187,7 +187,7 @@ var SOSMock = (function () {
       }
       case 'students.bulk': {
         if (!L.isAdmin(me)) return fail('FORBIDDEN', '관리자만 사용할 수 있습니다.');
-        var parsed = data.rows ? L.parseStudentRows(data.rows) : L.parseRosterText(data.text || '');
+        var parsed = data.rows ? L.parseStudentRows(data.rows, { defaultDept: data.defaultDept || '' }) : L.parseRosterText(data.text || '');
         if (!parsed.rows.length) return fail('BAD_REQUEST', '추가할 학생이 없습니다. ' + parsed.errors.join(' / '));
         var added = 0, updated = 0;
         parsed.rows.forEach(function (r) {

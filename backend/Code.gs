@@ -684,7 +684,7 @@ function upsertStudent(ctx, data) {
 
 function bulkStudents(ctx, data) {
   requireAdmin(ctx);
-  var parsed = data.rows ? SOSLib.parseStudentRows(data.rows) : SOSLib.parseRosterText(data.text || '');
+  var parsed = data.rows ? SOSLib.parseStudentRows(data.rows, { defaultDept: data.defaultDept || '' }) : SOSLib.parseRosterText(data.text || '');
   if (!parsed.rows.length) throw fail('BAD_REQUEST', '추가할 학생이 없습니다. ' + parsed.errors.join(' / '));
   return withLock(function () {
     var existing = listStudents();

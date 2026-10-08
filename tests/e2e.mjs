@@ -281,6 +281,18 @@ async function newPage(viewport) {
   await page.waitForFunction(() => /등록 완료/.test(document.body.textContent));
   check(/추가 1명/.test(await page.locator('.modal').textContent()), '학생 파일 업로드 등록');
   await page.locator('.modal').getByRole('button', { name: '닫기' }).click();
+  // 나이스 형식(제목 행, 학번·성명, 학과 열 없음) → 학과 입력 → 미리보기
+  await page.locator('input[type=file]').setInputFiles('tests/fixtures/neis.tsv');
+  await page.waitForFunction(() => /학과 열이 없습니다/.test(document.body.textContent));
+  await page.locator('.modal input[placeholder^="학과 이름"]').fill('전기과');
+  await page.locator('.modal').getByRole('button', { name: '계속' }).click();
+  await page.waitForSelector('.modal table');
+  const neisPreview = await page.locator('.modal').textContent();
+  check(/학생 2명 미리보기/.test(neisPreview) && /학번→A열/.test(neisPreview) && /전기과/.test(neisPreview), '나이스 형식 자동 인식 + 학과 일괄 적용');
+  await page.locator('.modal').getByRole('button', { name: /^등록/ }).click();
+  await page.waitForFunction(() => /등록 완료/.test(document.body.textContent));
+  check(/추가 2명/.test(await page.locator('.modal').textContent()), '나이스 형식 등록');
+  await page.locator('.modal').getByRole('button', { name: '닫기' }).click();
   await page.waitForSelector('textarea');
   await page.locator('textarea').fill('기계과 3 2 99 테스트학생');
   await page.getByRole('button', { name: '명단 추가' }).click();
